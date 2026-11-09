@@ -1,6 +1,10 @@
 //! Regression coverage across PSGC, the runtime adapter, Radiant and GPU sampling.
-//! Run: cargo test -p materials_component --test material_graph_rendering -- --nocapture
+//! Run: cargo test -p materials_plugin --test material_graph_rendering -- --nocapture
 //! GPU tests require an adapter; absence is a failure, never a silent pass.
+
+// The plugin as a game links it: its root, with every registration.
+use materials_plugin as _;
+
 // The materials' graph compiler, as material assets compile their graphs.
 use materials_component::graph as material_graph;
 

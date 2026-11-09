@@ -1,0 +1,88 @@
+//! What the materials plugin registers for a game (and the editor): every
+//! runtime contribution, grouped by the engine seam it plugs into.
+
+use engine_backend::subsystems::render::RenderFeatureRegistration;
+use helio_component::asset_component::{AssetLoaderRegistration, AssetReloadRegistration};
+use helio_mats::asset::MATERIAL_ASSET_KIND;
+use materials_component::assets;
+use plugin_editor_api::AssetKind;
+
+// ── Rendering ───────────────────────────────────────────────────────────────
+
+// The material texture table every kind's drawers bind, read with the
+// project's material sampler.
+inventory::submit! {
+    RenderFeatureRegistration {
+        origin: pulsar_plugins::origin!(),
+        features: materials_component::render_features,
+        configure: materials_component::configure_renderer,
+    }
+}
+
+// ── Assets ──────────────────────────────────────────────────────────────────
+
+// Material assets (surface documents and shader-graph folders), loaded on a
+// SceneDB worker thread.
+inventory::submit! {
+    AssetLoaderRegistration {
+        origin: pulsar_plugins::origin!(),
+        kind: MATERIAL_ASSET_KIND,
+        load: assets::load_material_asset,
+        size: Some(assets::payload_size),
+    }
+}
+
+// A changed material file (a document or a graph save) reloads its material.
+inventory::submit! {
+    AssetReloadRegistration {
+        origin: pulsar_plugins::origin!(),
+        name: "materials.material_files",
+        kind: AssetKind::Material,
+        sources_for_file: assets::material_sources_for_file,
+    }
+}
+
+// A changed texture reloads every loaded graph that samples it.
+inventory::submit! {
+    AssetReloadRegistration {
+        origin: pulsar_plugins::origin!(),
+        name: "materials.graph_textures",
+        kind: AssetKind::Texture,
+        sources_for_file: assets::graph_sources_sampling,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use engine_backend::subsystems::render::helio_renderer::render_features;
+
+    #[test]
+    fn the_engine_runs_the_material_texture_table() {
+        let features = render_features::plugin_features();
+        assert!(
+            features.ids().contains(&"pulsar.materials"),
+            "the materials' feature is registered"
+        );
+    }
+
+    /// Every registration of the plugin names this root, so it resolves to
+    /// the plugin's id.
+    #[test]
+    fn every_registration_resolves_to_the_plugin() {
+        let ours: Vec<_> = pulsar_plugins::contributions()
+            .into_iter()
+            .filter(|summary| summary.origin == pulsar_plugins::origin!())
+            .collect();
+        assert!(
+            ours.iter()
+                .any(|summary| summary.category == "asset.loader")
+        );
+        for summary in &ours {
+            assert_eq!(
+                pulsar_plugins::plugin_of(summary.origin).map(|plugin| plugin.id.as_str()),
+                Some("pulsar.materials"),
+                "{summary:?}"
+            );
+        }
+    }
+}

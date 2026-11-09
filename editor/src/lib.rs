@@ -1,48 +1,10 @@
-//! Materials (`pulsar.materials`): the editor plugin.
-//!
-//! The plugin's identity ([`MaterialsPlugin`]) and its editor: the material
-//! graph editor for `.material` assets (`materials_graph_editor`), registered
-//! as a linked editor provider ([`MaterialGraphEditorProvider`]). The
-//! components and every runtime registration are the component crate's
-//! (`materials_component`), which this crate links: the editor links this
-//! crate (through `installed_plugins`, as an installed plugin's editor
-//! module).
+//! Materials (`pulsar.materials`): the editor crate -- the material graph
+//! editor for `.material` assets (`materials_graph_editor`) as a linked
+//! editor provider ([`MaterialGraphEditorProvider`]). It registers nothing
+//! itself: the plugin's root crate (`materials_plugin`, with its `editor`
+//! feature) submits the provider to the editor.
 
 use plugin_editor_api::*;
-
-/// Links the component crate, so its registrations come with this crate.
-pub use materials_component as component;
-
-/// The plugin's identity.
-#[derive(Default)]
-pub struct MaterialsPlugin;
-
-impl MaterialsPlugin {
-    /// The plugin id.
-    pub const ID: &'static str = "pulsar.materials";
-}
-
-impl EditorPlugin for MaterialsPlugin {
-    fn metadata(&self) -> PluginMetadata {
-        // The plugin's identity is its descriptor's (pulsar-plugin.toml).
-        let descriptor = materials_component::plugin_descriptor();
-        PluginMetadata {
-            id: PluginId::new(descriptor.id),
-            name: descriptor.name,
-            version: "0.1.0".into(),
-            author: "Pulsar Team".into(),
-            description: descriptor.description,
-        }
-    }
-
-    fn file_types(&self) -> Vec<FileTypeDefinition> {
-        materials_graph_editor::file_types()
-    }
-
-    fn editors(&self) -> Vec<EditorMetadata> {
-        materials_graph_editor::editors()
-    }
-}
 
 /// The material graph editor as a linked editor provider: opens `.material`
 /// assets, offers the graph's AI tools, and does the graph editor's startup
@@ -51,7 +13,13 @@ impl EditorPlugin for MaterialsPlugin {
 pub struct MaterialGraphEditorProvider;
 
 impl MaterialGraphEditorProvider {
-    fn create() -> std::sync::Arc<dyn plugin_manager::BuiltinEditorProvider> {
+    /// The provider's id (its [`plugin_manager::BuiltinEditorProvider::provider_id`]):
+    /// the plugin's.
+    pub const ID: &'static str = "pulsar.materials";
+
+    /// The provider, after the graph editor's one-time startup work: what the
+    /// root's `plugin_manager::PluginEditorProvider` creates.
+    pub fn create() -> std::sync::Arc<dyn plugin_manager::BuiltinEditorProvider> {
         static STARTED: std::sync::Once = std::sync::Once::new();
         STARTED.call_once(|| {
             materials_graph_editor::initialize();
@@ -63,16 +31,9 @@ impl MaterialGraphEditorProvider {
     }
 }
 
-plugin_manager::inventory::submit! {
-    plugin_manager::PluginEditorProvider {
-        origin: pulsar_plugins::origin!(),
-        create: MaterialGraphEditorProvider::create,
-    }
-}
-
 impl plugin_manager::BuiltinEditorProvider for MaterialGraphEditorProvider {
     fn provider_id(&self) -> &str {
-        MaterialsPlugin::ID
+        Self::ID
     }
 
     fn file_types(&self) -> Vec<FileTypeDefinition> {
@@ -125,15 +86,5 @@ impl plugin_manager::BuiltinEditorProvider for MaterialGraphEditorProvider {
         let graph = panel.read(cx).graph_snapshot(cx);
         materials_graph_editor::upsert_ai_session(file_path, graph);
         Ok(std::sync::Arc::new(panel))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn has_the_plugin_id() {
-        assert_eq!(MaterialsPlugin.metadata().id.as_str(), "pulsar.materials");
     }
 }
