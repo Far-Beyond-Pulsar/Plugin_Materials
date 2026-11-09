@@ -2,12 +2,14 @@
 //! ([`SurfaceMaterialDocument`] JSON) or a shader-graph folder
 //! ([`SHADER_GRAPH_FILE`], with the textures it samples).
 //!
-//! The plugin owns the kind ([`MATERIAL_ASSET_KIND`]): its loader runs on a
-//! SceneDB worker thread, reads the document or compiles the graph (decoding
-//! its textures there too) and produces a [`MaterialPayload`]; whoever draws
-//! with materials binds that payload and asks it for rows
-//! ([`MaterialAsset::resolve`]), without linking this crate. A graph takes
-//! slots in a scene's texture store when a draw in that scene resolves it.
+//! The plugin owns the kind ([`helio_mats::asset::MATERIAL_ASSET_KIND`]):
+//! its loader ([`load_material_asset`], registered by the plugin's root
+//! crate) runs on a SceneDB worker thread, reads the document or compiles the
+//! graph (decoding its textures there too) and produces a
+//! [`MaterialPayload`]; whoever draws with materials binds that payload and
+//! asks it for rows ([`MaterialAsset::resolve`]), without linking this
+//! crate. A graph takes slots in a scene's texture store when a draw in that
+//! scene resolves it.
 //!
 //! A material's source is its path as authored, normalized
 //! (`helio_component::asset_source`): the loader resolves it against the
@@ -20,13 +22,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use helio_component::asset_component::{
-    AssetLoaderRegistration, AssetReloadRegistration, asset_source,
-};
+use helio_component::asset_component::asset_source;
 use helio_component::texture_assets::LoadedTexture;
 use helio_mats::asset::{
-    MATERIAL_ASSET_KIND, MaterialAsset, MaterialPayload, ResolvedMaterial, SHADER_GRAPH_FILE,
-    SurfaceMaterialDocument, SurfaceValues,
+    MaterialAsset, MaterialPayload, ResolvedMaterial, SHADER_GRAPH_FILE, SurfaceMaterialDocument,
+    SurfaceValues,
 };
 use pulsar_scenedb::{AssetId, AssetPayload};
 
@@ -103,37 +103,12 @@ impl MaterialAsset for LoadedMaterial {
 
 /// Bytes a loaded material holds outside SceneDB's residency cache: a
 /// graph's texture handles (the images are budgeted by the cache, see
-/// `LoadedTexture`).
-fn payload_size(payload: &AssetPayload) -> usize {
+/// `LoadedTexture`). The size of the plugin's asset loader (the root crate
+/// registers it).
+pub fn payload_size(payload: &AssetPayload) -> usize {
     payload
         .downcast_ref::<MaterialPayload>()
         .map_or(0, |material| material.0.held_bytes())
-}
-
-inventory::submit! {
-    AssetLoaderRegistration {
-        origin: pulsar_plugins::origin!(),
-        kind: MATERIAL_ASSET_KIND,
-        load: load_material_asset,
-        size: Some(payload_size),
-    }
-}
-
-inventory::submit! {
-    AssetReloadRegistration {
-        origin: pulsar_plugins::origin!(),
-        kind: plugin_editor_api::AssetKind::Material,
-        sources_for_file: material_sources_for_file,
-    }
-}
-
-// A texture reloads every loaded graph that samples it.
-inventory::submit! {
-    AssetReloadRegistration {
-        origin: pulsar_plugins::origin!(),
-        kind: plugin_editor_api::AssetKind::Texture,
-        sources_for_file: graph_sources_sampling,
-    }
 }
 
 /// The file the material at `source` is read from: a graph folder's save,
@@ -150,8 +125,9 @@ fn resolve_material_file(source: &str) -> PathBuf {
     }
 }
 
-/// The material kind's loader: runs on a SceneDB worker thread.
-fn load_material_asset(source: &str) -> Result<AssetPayload, String> {
+/// The material kind's loader: runs on a SceneDB worker thread (the root
+/// crate registers it for [`helio_mats::asset::MATERIAL_ASSET_KIND`]).
+pub fn load_material_asset(source: &str) -> Result<AssetPayload, String> {
     Ok(Arc::new(MaterialPayload(Arc::new(load_material(source)?))))
 }
 

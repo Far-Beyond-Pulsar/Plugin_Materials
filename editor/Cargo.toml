@@ -1,25 +1,18 @@
 [package]
-name = "materials_plugin"
+name = "materials_editor"
 version = "0.1.0"
 edition = "2024"
-description = "Materials (pulsar.materials): the editor plugin -- its metadata, the material graph editor's registration, over the plugin's component crate"
+description = "Materials (pulsar.materials): the editor crate -- the material graph editor as a linked editor provider; the root crate registers it"
 
 [lib]
-name = "materials_plugin"
-
-[features]
-# Statically linked hosts (the editor) use the Rust API; the component crate
-# (with everything it registers) comes with this crate.
-builtin = []
+name = "materials_editor"
 
 [dependencies]
-materials_component = { workspace = true }
 plugin_editor_api = { workspace = true }
 # The material graph editor (the `.material` asset's editor).
 materials_graph_editor = { workspace = true }
 plugin_manager = { workspace = true }
 asset_import = { workspace = true }
-pulsar_plugins = { workspace = true }
 gpui-ce = { workspace = true }
 ui = { workspace = true }
 serde_json = { workspace = true }

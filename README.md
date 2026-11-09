@@ -19,14 +19,22 @@ draw phases and api crates.
 
 | Crate | Path | What |
 |---|---|---|
+| `materials_plugin` | `.` | Materials (`pulsar.materials`): the plugin's root crate, the one place it registers everything it contributes (runtime registrations always, the editor's with `editor`) |
 | `helio-mats` | `api/` | The materials' public contract (pulsar.materials): the GPU material row and table, the material texture table and its binding modes, texture uploads, PBR evaluation and specular AA WGSL, and the Radiant material templates. The one crate another kind reads a material concept from. |
-| `materials_component` | `component/` | Materials (pulsar.materials): the registrations of the plugin's Helio feature (the material texture table) and of its settings (the material sampler, from the project's texture streaming settings) |
-| `materials_plugin` | `editor/` | Materials (pulsar.materials): the editor plugin -- its metadata, the material graph editor's registration, over the plugin's component crate |
+| `materials_component` | `component/` | Materials (pulsar.materials): the material assets (loader and reloads), the material graph compiler and the plugin's Helio feature set (the material texture table and its sampler); the root crate registers them |
+| `materials_editor` | `editor/` | Materials (pulsar.materials): the editor crate -- the material graph editor as a linked editor provider; the root crate registers it |
 | `helio-pass-materials` | `feature/` | The materials' Helio feature (pulsar.materials): the material texture table, built every frame from the scene's texture store and published for every kind's drawers |
 | `materials_graph_editor` | `graph_editor/` | Materials (pulsar.materials): the material graph editor -- the node canvas, PSGC compilation, live previews and the .material asset's save/load (formerly Plugin_Shaders' shader_editor) |
 
-- **Runtime module** (what a game built for a project links): `materials_component`.
-- **Editor module** (what the editor links in addition): `materials_plugin`.
+The root crate (`materials_plugin`, this directory) is the one place the
+plugin submits its contributions: the Helio feature, the asset loader and
+reloads, the material instances' SceneDB attachments and, with its `editor`
+feature, the material graph editor's provider. The other crates register
+nothing (`helio-mats`, an api crate, holds no registration). A game links the
+root without `editor`; the editor links it with.
+
+- **Root crate**: `materials_plugin` (runtime registrations always, the
+  editor's with the `editor` feature).
 - **Requires**: nothing. A project enables or disables the plugin in its
   `Pulsar.toml` (`[plugins]`); disabled, the kind is absent and the frame
   draws without it.
@@ -44,8 +52,8 @@ only inside a Pulsar-Native checkout:
 ```bash
 git clone --recursive https://github.com/Far-Beyond-Pulsar/Pulsar-Native
 cd Pulsar-Native
-cargo check -p helio-mats -p materials_component -p materials_plugin -p helio-pass-materials -p materials_graph_editor --tests
-cargo test -p helio-mats -p materials_component -p helio-pass-materials
+cargo check -p materials_plugin -p helio-mats -p materials_component -p materials_editor -p helio-pass-materials -p materials_graph_editor --features materials_plugin/editor --tests
+cargo test -p materials_plugin -p helio-mats -p materials_component -p helio-pass-materials
 ```
 
 Suites that render real frames need a GPU; CI leaves them out by name

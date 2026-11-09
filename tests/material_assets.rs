@@ -8,11 +8,19 @@
 //! reloads the material once for every mesh using it.
 //!
 //! The meshes read the materials through the materials' api only
-//! (`helio_mats`); this crate's loader serves them.
+//! (`helio_mats`); the plugin's loader (`materials_component::assets`,
+//! registered by this root crate) serves them, and the meshes' root registers
+//! the mesh class a level decodes.
 //!
 //! One test, because the project path sources resolve against is a process
 //! global. No GPU: a graph is compiled against texture slots when a mirror
 //! derives the draw, which the render acceptance tests cover.
+
+// The plugin as a game links it: its root, with every registration.
+use materials_plugin as _;
+// The meshes as a game links them: their root registers the mesh class a
+// level decodes.
+use meshes_plugin as _;
 
 use std::path::Path;
 use std::time::Duration;
