@@ -15,11 +15,6 @@ pub const MAX_MATERIAL_TEXTURES: usize = helio_core::TEXTURE_TABLE_LIMIT;
 /// which a host asks for). A partial set uses the baseline bindings.
 pub const BINDLESS_MATERIAL_FEATURES: wgpu::Features = helio_core::TEXTURE_BINDING_ARRAYS;
 
-/// Sampled-texture slots reserved for non-material inputs in the most
-/// constrained material-consuming stage. Decal collection reads depth plus
-/// four G-buffer textures alongside the material table.
-pub const EXPANDED_MATERIAL_TEXTURE_RESERVE: usize = 5;
-
 /// GPU material texture binding implementation selected for one device.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaterialBindingMode {
@@ -40,40 +35,21 @@ impl MaterialBindingConfig {
         Self::from_capabilities(device.features(), device.limits())
     }
 
-    /// Select the material binding representation from adapter/device capabilities.
-    ///
-    /// Keeping this decision pure lets device creation, scene capacity, and pass
-    /// construction share one auditable capability contract.
+    /// The material binding for adapter/device capabilities: the texture
+    /// table's, which Helio core decides
+    /// ([`helio_core::texture_table_uses_binding_arrays`],
+    /// [`helio_core::texture_table_capacity`]), so the scene's texture store
+    /// and every pass that reads the table agree on its size.
     pub fn from_capabilities(features: wgpu::Features, limits: wgpu::Limits) -> Self {
-        #[cfg(not(target_arch = "wasm32"))]
-        let mode = if features.contains(BINDLESS_MATERIAL_FEATURES) {
+        let mode = if helio_core::texture_table_uses_binding_arrays(features) {
             MaterialBindingMode::BindingArray
         } else {
             MaterialBindingMode::Expanded
         };
-        #[cfg(target_arch = "wasm32")]
-        let mode = MaterialBindingMode::Expanded;
-
-        let sampled_texture_limit = limits.max_sampled_textures_per_shader_stage as usize;
-        let sampler_limit = limits.max_samplers_per_shader_stage as usize;
-        let stage_limit = match mode {
-            MaterialBindingMode::BindingArray => sampled_texture_limit.min(sampler_limit),
-            MaterialBindingMode::Expanded => sampled_texture_limit
-                .saturating_sub(EXPANDED_MATERIAL_TEXTURE_RESERVE)
-                .min(sampler_limit),
-        };
-        let binding_limit = match mode {
-            MaterialBindingMode::BindingArray => usize::MAX,
-            MaterialBindingMode::Expanded => {
-                (limits.max_bindings_per_bind_group as usize).saturating_sub(2) / 2
-            }
-        };
-        let max_textures = MAX_MATERIAL_TEXTURES.min(stage_limit).min(binding_limit);
-        assert!(
-            max_textures > 0,
-            "Helio requires at least one sampled texture and sampler binding"
-        );
-        Self { mode, max_textures }
+        Self {
+            mode,
+            max_textures: helio_core::texture_table_capacity(features, &limits),
+        }
     }
 
     pub fn uses_binding_arrays(self) -> bool {
@@ -272,7 +248,7 @@ pub struct MaterialTextureBindings<'a> {
 mod material_binding_tests {
     use super::{
         MaterialBindingConfig, MaterialBindingMode, BINDLESS_MATERIAL_FEATURES,
-        EXPANDED_MATERIAL_TEXTURE_RESERVE, MAX_MATERIAL_TEXTURES,
+        MAX_MATERIAL_TEXTURES,
     };
 
     fn limits(sampled_textures: u32, samplers: u32, bindings: u32) -> wgpu::Limits {
@@ -295,7 +271,7 @@ mod material_binding_tests {
             assert_eq!(config.mode, MaterialBindingMode::Expanded);
             assert_eq!(
                 config.max_textures,
-                (16 - EXPANDED_MATERIAL_TEXTURE_RESERVE).min(MAX_MATERIAL_TEXTURES)
+                (16 - helio_core::TEXTURE_TABLE_RESERVE).min(MAX_MATERIAL_TEXTURES)
             );
         }
     }
