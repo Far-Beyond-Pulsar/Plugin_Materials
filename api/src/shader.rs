@@ -28,7 +28,7 @@ pub const PBR_EVAL_SNIPPET: helio_core::shader::ShaderSnippet =
 /// Specular anti-aliasing (`normal_map_roughness`, `geometric_roughness`,
 /// `specular_aa_roughness`): roughness widened by the normals a pixel
 /// covers, read from normal maps whose mips keep their spread
-/// ([`crate::texture_mips`]).
+/// ([`helio_core::texture_mips`]).
 pub const SPECULAR_AA: &str = include_str!("../shaders/specular_aa.wgsl");
 
 /// Marker opting a shader into [`SPECULAR_AA`]. Must appear in the source.

@@ -1,0 +1,96 @@
+# The materials plugin's rows of the SceneDB closure ledger (Pulsar-Native#1035):
+# its classes, GPU schemas, buffers, pass crates and call sites. A plugin owns
+# the rows of what it ships (Pulsar-Native#1606); `cargo test -p scene_inventory`
+# in a Pulsar-Native checkout recomputes every fact column, checks the human
+# columns, and fails on a missing, stale or misplaced row. The columns are
+# described in Pulsar-Native's crates/core/scene_inventory/ledger.toml.
+
+# ── GPU-bearing schemas ─────────────────────────────────────────
+
+[[schema]]
+type = "MaterialComponent"
+path = "helio_mats::host_rows::MaterialComponent"
+buffers = ["materials"]
+clears_on_remove = true
+releases_var_len = false
+registered = true
+writer = "the material instance's GPU dispatch, at the instance entity's row"
+owner = "helio_mats::host_rows"
+disposition = "keep: the material table row a drawer reads by entity row"
+target_contract = "p17; plugin-migration.md (material instances)"
+test = "plugins/vendor/materials/tests/material_assets.rs"
+status = "verified"
+
+[[schema]]
+type = "MaterialInstanceComponent"
+path = "helio_mats::instance::MaterialInstanceComponent"
+buffers = []
+clears_on_remove = true
+releases_var_len = false
+registered = false
+writer = "none: an interned instance (helio_mats::instance::acquire); its dispatch writes MaterialComponent and MaterialKeyComponent"
+owner = "helio_mats::instance"
+disposition = "keep: a material source (asset, surface, fallback) as an entity, shared by every slot naming it"
+target_contract = "p17; plugin-migration.md (material instances)"
+test = "plugins/vendor/materials/tests/material_assets.rs"
+status = "verified"
+
+[[schema]]
+type = "MaterialKeyComponent"
+path = "helio_mats::instance::MaterialKeyComponent"
+buffers = ["material_keys"]
+clears_on_remove = true
+releases_var_len = false
+registered = true
+writer = "the material instance's GPU dispatch"
+owner = "helio_mats::instance"
+disposition = "keep: the class and graph key a drawer's pipeline is chosen by"
+target_contract = "p17; plugin-migration.md (material instances)"
+test = "plugins/vendor/meshes/tests/scene_join_rows.rs"
+status = "verified"
+
+# ── GPU buffer keys ─────────────────────────────────────────────
+
+[[buffer]]
+key = "materials"
+producers = ["MaterialComponent"]
+consumers = []
+owner = "helio-scene-derivations scene join (execution output, one row per drawn section)"
+disposition = "keep: material rows come from StaticMeshDraw's resolved slot materials; the default is the slot's imported surface, defined once in helio-component (Phase 2)"
+target_contract = "Phase 2; 03-gpu-reflection-and-rendering.md"
+test = "plugins/installed/tests/render_acceptance.rs"
+status = "verified"
+
+[[buffer]]
+key = "material_keys"
+producers = ["MaterialKeyComponent"]
+consumers = []
+owner = "helio_mats::instance (MaterialKeyComponent)"
+disposition = "keep: each material instance's class and graph key at its entity row; the meshes' scene join reads it to pick a drawer's pipeline (bound by the join, not by a pass crate)"
+target_contract = "p17; plugin-migration.md (material instances)"
+test = "plugins/vendor/meshes/tests/scene_join_rows.rs"
+status = "verified"
+
+# ── Render pass crates ──────────────────────────────────────────
+
+[[pass]]
+crate = "helio-pass-materials"
+in_default_graph = false
+reads = []
+owner = "helio-pass-materials"
+disposition = "keep: the kind's own, moved with it into its plugin (plugin-migration.md Phases B and C)"
+target_contract = "Phase C; plugin-migration.md"
+test = "none: no test names this row; the owning plugin's suites cover its behaviour"
+status = "unverified"
+
+# ── Lifecycle call sites ────────────────────────────────────────
+
+[[site]]
+pattern = "asset-binding"
+file = "plugins/vendor/materials/api/src/instance.rs"
+count = 1
+owner = "helio_mats::instance (MaterialInstanceComponent)"
+disposition = "keep: binds a loaded material asset into the instances naming it; the instance writes its material and key rows"
+target_contract = "p17; plugin-migration.md (material instances)"
+test = "plugins/vendor/materials/tests/material_assets.rs"
+status = "verified"
