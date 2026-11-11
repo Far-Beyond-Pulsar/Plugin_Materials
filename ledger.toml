@@ -54,7 +54,7 @@ status = "verified"
 [[buffer]]
 key = "materials"
 producers = ["MaterialComponent"]
-consumers = []
+consumers = ["helio-pass-forward-lit", "helio-pass-gbuffer", "helio-pass-gi", "helio-pass-object-batch", "helio-pass-portal-instances", "helio-pass-shadow", "helio-pass-transparent", "helio-pass-vg", "helio-pass-vg-dense", "helio-pass-vg-raster", "helio-pass-vg-shade", "helio-pass-voxel-planet"]
 owner = "helio-scene-derivations scene join (execution output, one row per drawn section)"
 disposition = "keep: material rows come from StaticMeshDraw's resolved slot materials; the default is the slot's imported surface, defined once in helio-component (Phase 2)"
 target_contract = "Phase 2; 03-gpu-reflection-and-rendering.md"
@@ -64,7 +64,7 @@ status = "verified"
 [[buffer]]
 key = "material_keys"
 producers = ["MaterialKeyComponent"]
-consumers = []
+consumers = ["meshes_component"]
 owner = "helio_mats::instance (MaterialKeyComponent)"
 disposition = "keep: each material instance's class and graph key at its entity row; the meshes' scene join reads it to pick a drawer's pipeline (bound by the join, not by a pass crate)"
 target_contract = "p17; plugin-migration.md (material instances)"
