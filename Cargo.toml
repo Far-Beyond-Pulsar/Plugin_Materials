@@ -18,7 +18,6 @@ engine_fs = { workspace = true }
 ui_types_common = { workspace = true }
 # The plugin gate and the registrations' collection.
 pulsar_plugins = { workspace = true }
-inventory = { workspace = true }
 # The plugin's crates. The material instances (`helio_mats::instance`) are the
 # api's types; their SceneDB attachments are registered here (an api crate
 # holds no registration).
