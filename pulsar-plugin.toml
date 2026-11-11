@@ -6,6 +6,10 @@ id = "pulsar.materials"
 name = "Materials"
 description = "Materials: the material row and texture table every kind draws with, the PBR evaluation and the Radiant material templates"
 enabled_by_default = true
+provides = [
+    { id = "pulsar.materials.table", kind = "buffer", members = ["materials"], version = 1 },
+    { id = "pulsar.materials.api", kind = "api", members = ["helio-mats", "helio-pass-materials", "materials_component"], version = 1 },
+]
 requires = []
 
 # The plugin's root crate (the package in this directory): the one place it
