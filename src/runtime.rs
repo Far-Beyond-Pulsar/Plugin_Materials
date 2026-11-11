@@ -119,9 +119,10 @@ mod tests {
             .into_iter()
             .filter(|summary| summary.origin == pulsar_plugins::origin!())
             .collect();
-        assert!(ours
-            .iter()
-            .any(|summary| summary.category == "asset.loader"));
+        assert!(
+            ours.iter()
+                .any(|summary| summary.category == "asset.loader")
+        );
         for summary in &ours {
             assert_eq!(
                 pulsar_plugins::plugin_of(summary.origin).map(|plugin| plugin.id.as_str()),
