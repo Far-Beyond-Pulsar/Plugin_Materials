@@ -154,11 +154,8 @@ impl ShaderEditorPanel {
         let target_path = resolve_shader_path(path);
         let content = encode(&self.to_shader_asset(cx))?;
 
-        if let Some(parent) = target_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
-        }
-        std::fs::write(&target_path, &content)
+        // `write_file` creates the parent folders.
+        engine_fs::virtual_fs::write_file(&target_path, content.as_bytes())
             .map_err(|e| format!("Failed to write file: {}", e))?;
         tracing::info!("saved {} bytes to {:?}", content.len(), target_path);
         Ok(())
@@ -190,7 +187,7 @@ impl ShaderEditorPanel {
     /// thread once the restored workspace is visible.
     pub(crate) fn parse_asset_from_path(path: &Path) -> Result<(PathBuf, ShaderAsset), String> {
         let source_path = resolve_shader_path(path);
-        let content = std::fs::read_to_string(&source_path)
+        let content = engine_fs::virtual_fs::read_to_string(&source_path)
             .map_err(|e| format!("Failed to read file: {}", e))?;
         let asset = decode(&content)?;
         Ok((source_path, asset))
@@ -266,8 +263,10 @@ impl ShaderEditorPanel {
 
     /// Check if an autosave file exists for the current path
     pub fn has_autosave(&self) -> bool {
-        self.get_graph_file_path()
-            .is_some_and(|path| path.with_extension("material.autosave").exists())
+        self.get_graph_file_path().is_some_and(|path| {
+            engine_fs::virtual_fs::exists(&path.with_extension("material.autosave"))
+                .unwrap_or(false)
+        })
     }
 
     /// Load from autosave file (recovery)
@@ -282,7 +281,7 @@ impl ShaderEditorPanel {
         let autosave_path = path.with_extension("material.autosave");
         self.load_from_path(&autosave_path, window, cx)?;
         // Delete autosave after successful recovery
-        std::fs::remove_file(&autosave_path)
+        engine_fs::virtual_fs::delete_path(&autosave_path)
             .map_err(|e| format!("Failed to delete autosave file: {}", e))
     }
 
@@ -294,7 +293,8 @@ impl ShaderEditorPanel {
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
         let content = encode(&self.to_shader_asset(cx))?;
-        std::fs::write(export_path, &content).map_err(|e| format!("Failed to export shader: {}", e))
+        engine_fs::virtual_fs::write_file(export_path, content.as_bytes())
+            .map_err(|e| format!("Failed to export shader: {}", e))
     }
 
     fn get_graph_file_path(&self) -> Option<PathBuf> {

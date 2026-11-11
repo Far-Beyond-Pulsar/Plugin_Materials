@@ -25,14 +25,14 @@ pub struct GraphPreview {
 /// `shader_graph_save.json`, or that file itself. `None` for anything else
 /// (a scalar `.mat`).
 fn graph_file(path: &Path) -> Option<PathBuf> {
-    let file = if path.is_dir() {
+    let file = if engine_fs::virtual_fs::is_dir(path) {
         path.join(SHADER_GRAPH_FILE)
     } else if path.file_name().is_some_and(|n| n == SHADER_GRAPH_FILE) {
         path.to_path_buf()
     } else {
         return None;
     };
-    file.is_file().then_some(file)
+    engine_fs::virtual_fs::is_file(&file).then_some(file)
 }
 
 /// Compile the graph material `material_asset` (project-relative). `None`
@@ -47,7 +47,7 @@ pub fn compile_graph_preview(
 }
 
 fn compile_file(file: &Path, project_root: &Path) -> Result<GraphPreview, String> {
-    let bytes = std::fs::read(file).map_err(|error| error.to_string())?;
+    let bytes = engine_fs::virtual_fs::read_file(file).map_err(|error| error.to_string())?;
     let text = std::str::from_utf8(&bytes).map_err(|error| error.to_string())?;
     // Shader graph saves may carry a line comment before their JSON body.
     let start = text
