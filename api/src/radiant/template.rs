@@ -265,18 +265,6 @@ impl RadiantTemplateRegistry {
         );
     }
 
-    /// Load a template (a surface function, see [`RadiantTemplate::compose`])
-    /// from a WGSL file on disk. Returns the assigned template_id.
-    pub fn load_from_file(&mut self, path: &std::path::Path) -> std::io::Result<u32> {
-        let source = std::fs::read_to_string(path)?;
-        Ok(self.register_str(
-            path.file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown"),
-            source,
-        ))
-    }
-
     /// Register a template (a surface function and its helpers, see
     /// [`RadiantTemplate::compose`]) from a string.
     pub fn register_str(&mut self, name: &str, wgsl_source: String) -> u32 {

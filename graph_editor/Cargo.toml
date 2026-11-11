@@ -49,3 +49,6 @@ parking_lot = { workspace = true }
 bytemuck = { workspace = true }
 tool_registry = { workspace = true }
 tool_registry_macros = { workspace = true }
+
+[lints]
+workspace = true

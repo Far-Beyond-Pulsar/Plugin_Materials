@@ -45,9 +45,7 @@ fn normalize_file_key(file_path: &Path) -> PathBuf {
         file_path.to_path_buf()
     };
 
-    candidate
-        .canonicalize()
-        .unwrap_or_else(|_| candidate.to_path_buf())
+    engine_fs::virtual_fs::canonicalize(&candidate).unwrap_or_else(|_| candidate.to_path_buf())
 }
 
 pub fn upsert_session(file_path: PathBuf, graph: GraphDescription) {
@@ -142,7 +140,7 @@ fn with_session_mut<R>(f: impl FnOnce(&mut AiSession) -> Result<R>) -> Result<R>
 }
 
 fn is_blueprint_file(file_path: &Path) -> bool {
-    if file_path.is_dir() {
+    if engine_fs::virtual_fs::is_dir(file_path) {
         return true;
     }
 

@@ -13,6 +13,9 @@ autoexamples = false
 editor = ["dep:materials_editor", "dep:plugin_manager"]
 
 [dependencies]
+# Image and material files changed on disk are asset updates (`engine_fs::AssetChangeKind`).
+engine_fs = { workspace = true }
+ui_types_common = { workspace = true }
 # The plugin gate and the registrations' collection.
 pulsar_plugins = { workspace = true }
 inventory = { workspace = true }

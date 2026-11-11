@@ -82,7 +82,7 @@ impl ImportCompanion for MaterialFromImages {
             let material = folder.join(format!("{name}.material"));
             // A material that exists may have been edited: keep it, and still
             // report it so the import keeps owning (and assigning) it.
-            if !material.join(GRAPH_FILE).exists() {
+            if !engine_fs::virtual_fs::exists(&material.join(GRAPH_FILE)).unwrap_or(false) {
                 write_material(&material, folder, surface, context.project_root)?;
             }
             outputs.push(CompanionOutput {
@@ -137,8 +137,10 @@ fn write_material(
     })?;
     let asset = ShaderAsset::with_graph(graph);
     let text = serialize_shader_with_header(&asset)?;
-    std::fs::create_dir_all(material)
-        .and_then(|()| std::fs::write(material.join(GRAPH_FILE), text))
+    engine_fs::virtual_fs::create_dir_all(material)
+        .and_then(|()| {
+            engine_fs::virtual_fs::write_file(&material.join(GRAPH_FILE), text.as_bytes())
+        })
         .map_err(|error| format!("write {}: {error}", material.display()))
 }
 
@@ -150,8 +152,8 @@ fn texture_reference(image: &Path, folder: &Path, project_root: &Path) -> Result
         image.to_path_buf()
     } else {
         let copy = folder.join(image.file_name().ok_or("image has no file name")?);
-        if !copy.exists() {
-            std::fs::copy(image, &copy)
+        if !engine_fs::virtual_fs::exists(&copy).unwrap_or(false) {
+            engine_fs::virtual_fs::copy(image, &copy)
                 .map_err(|error| format!("copy {}: {error}", image.display()))?;
         }
         copy

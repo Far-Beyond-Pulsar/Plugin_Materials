@@ -25,8 +25,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use helio_component::asset_component::asset_source;
 use helio_component::texture_assets::LoadedTexture;
 use helio_mats::asset::{
-    MaterialAsset, MaterialPayload, ResolvedMaterial, SHADER_GRAPH_FILE, SurfaceMaterialDocument,
-    SurfaceValues,
+    MaterialAsset, MaterialPayload, ResolvedMaterial, SurfaceMaterialDocument, SurfaceValues,
+    SHADER_GRAPH_FILE,
 };
 use pulsar_scenedb::{AssetId, AssetPayload};
 
@@ -118,7 +118,7 @@ fn resolve_material_file(source: &str) -> PathBuf {
         Some(root) => helio_component::subsystems::resolve_asset_path(Path::new(&root), source),
         None => PathBuf::from(source),
     };
-    if path.is_dir() {
+    if engine_fs::virtual_fs::is_dir(&path) {
         path.join(SHADER_GRAPH_FILE)
     } else {
         path
@@ -135,7 +135,7 @@ pub fn load_material_asset(source: &str) -> Result<AssetPayload, String> {
 /// show a material outside a world).
 pub fn load_material(source: &str) -> Result<LoadedMaterial, String> {
     let file = resolve_material_file(source);
-    let bytes = std::fs::read(&file)
+    let bytes = engine_fs::virtual_fs::read_file(&file)
         .map_err(|error| format!("could not read '{}': {error}", file.display()))?;
     if file
         .file_name()

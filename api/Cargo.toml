@@ -35,3 +35,6 @@ serde_json = { workspace = true, optional = true }
 [dev-dependencies]
 naga = { version = "30", features = ["wgsl-in"] }
 image = { workspace = true, features = ["png"] }
+
+[lints]
+workspace = true

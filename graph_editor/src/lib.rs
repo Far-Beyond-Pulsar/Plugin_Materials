@@ -55,7 +55,7 @@ pub fn execute_compiled_tool(
 /// Register the renderer of the `.material` assets' thumbnails (part of
 /// [`initialize`]).
 pub fn register_material_thumbnail_renderer() {
-    engine_fs::thumbnails::register_thumbnail_renderer(
+    ui_common::thumbnails::register_thumbnail_renderer(
         "material",
         crate::features::preview::thumbnail::render_material_thumbnail,
     );
