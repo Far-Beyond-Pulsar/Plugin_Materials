@@ -47,5 +47,10 @@ image = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 
+# The render graph node test (`tests/graph_node.rs`).
+helio-graph-asset = { workspace = true }
+helio-presets = { workspace = true }
+helio-feature-api = { workspace = true }
+
 [lints]
 workspace = true
