@@ -7,29 +7,51 @@ use helio_mats::asset::MATERIAL_ASSET_KIND;
 use materials_component::assets;
 use plugin_editor_api::AssetKind;
 
-// ── Rendering ───────────────────────────────────────────────────────────────
+/// Everything the plugin registers for a game (and the editor).
+pub(crate) fn build(p: &mut pulsar_plugins::PluginBuilder) {
+    // ── Rendering ───────────────────────────────────────────────────────
 
-// The material texture table every kind's drawers bind, read with the
-// project's material sampler.
-inventory::submit! {
-    RenderFeatureRegistration {
-        origin: pulsar_plugins::origin!(),
+    // The material texture table every kind's drawers bind, read with the
+    // project's material sampler.
+    p.add(RenderFeatureRegistration {
+        origin: p.origin(),
         features: materials_component::render_features,
         configure: materials_component::configure_renderer,
-    }
-}
+    });
 
-// ── Assets ──────────────────────────────────────────────────────────────────
+    // ── Assets ──────────────────────────────────────────────────────────
 
-// Material assets (surface documents and shader-graph folders), loaded on a
-// SceneDB worker thread.
-inventory::submit! {
-    AssetLoaderRegistration {
-        origin: pulsar_plugins::origin!(),
+    // Material assets (surface documents and shader-graph folders), loaded on a
+    // SceneDB worker thread.
+    p.add(AssetLoaderRegistration {
+        origin: p.origin(),
         kind: MATERIAL_ASSET_KIND,
         load: assets::load_material_asset,
         size: Some(assets::payload_size),
-    }
+    });
+
+    // The project watcher publishes an update for a changed image or material.
+    p.add(engine_fs::AssetChangeKind {
+        origin: p.origin(),
+        id: "materials.files",
+        kind_of: material_change,
+    });
+
+    // A changed material file (a document or a graph save) reloads its material.
+    p.add(AssetReloadRegistration {
+        origin: p.origin(),
+        name: "materials.material_files",
+        kind: AssetKind::Material,
+        sources_for_file: assets::material_sources_for_file,
+    });
+
+    // A changed texture reloads every loaded graph that samples it.
+    p.add(AssetReloadRegistration {
+        origin: p.origin(),
+        name: "materials.graph_textures",
+        kind: AssetKind::Texture,
+        sources_for_file: assets::graph_sources_sampling,
+    });
 }
 
 /// An image or material file changed on disk is that asset's update (every
@@ -49,35 +71,6 @@ pub fn material_change(path: &std::path::Path) -> Option<ui_types_common::AssetK
     match extension.map(AssetKind::from_extension) {
         Some(kind @ (AssetKind::Texture | AssetKind::Material)) => Some(kind),
         _ => None,
-    }
-}
-
-// The project watcher publishes an update for a changed image or material.
-inventory::submit! {
-    engine_fs::AssetChangeKind {
-        origin: pulsar_plugins::origin!(),
-        id: "materials.files",
-        kind_of: material_change,
-    }
-}
-
-// A changed material file (a document or a graph save) reloads its material.
-inventory::submit! {
-    AssetReloadRegistration {
-        origin: pulsar_plugins::origin!(),
-        name: "materials.material_files",
-        kind: AssetKind::Material,
-        sources_for_file: assets::material_sources_for_file,
-    }
-}
-
-// A changed texture reloads every loaded graph that samples it.
-inventory::submit! {
-    AssetReloadRegistration {
-        origin: pulsar_plugins::origin!(),
-        name: "materials.graph_textures",
-        kind: AssetKind::Texture,
-        sources_for_file: assets::graph_sources_sampling,
     }
 }
 
@@ -126,9 +119,10 @@ mod tests {
             .into_iter()
             .filter(|summary| summary.origin == pulsar_plugins::origin!())
             .collect();
-        assert!(ours
-            .iter()
-            .any(|summary| summary.category == "asset.loader"));
+        assert!(
+            ours.iter()
+                .any(|summary| summary.category == "asset.loader")
+        );
         for summary in &ours {
             assert_eq!(
                 pulsar_plugins::plugin_of(summary.origin).map(|plugin| plugin.id.as_str()),

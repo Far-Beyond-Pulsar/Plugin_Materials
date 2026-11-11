@@ -27,7 +27,7 @@ draw phases and api crates.
 | `materials_graph_editor` | `graph_editor/` | Materials (pulsar.materials): the material graph editor -- the node canvas, PSGC compilation, live previews and the .material asset's save/load (formerly Plugin_Shaders' shader_editor) |
 
 The root crate (`materials_plugin`, this directory) is the one place the
-plugin submits its contributions: the Helio feature, the asset loader and
+plugin registers its contributions through its `build`: the Helio feature, the asset loader and
 reloads, the material instances' SceneDB attachments and, with its `editor`
 feature, the material graph editor's provider. The other crates register
 nothing (`helio-mats`, an api crate, holds no registration). A game links the
