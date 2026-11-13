@@ -1,5 +1,6 @@
-//! The materials add no pass to the frame: their feature's node is the host
-//! input that declares and supplies the material texture table. It is
+//! The materials' frame node is the host input that declares and supplies
+//! the material texture table (their only other pass, the shading-cost
+//! view, joins only while its debug view is shown). The table's node is
 //! registered by the plugin's root through its render feature, a data-only
 //! node (no flow pins, never on the execution chain) every drawer's
 //! `MATERIAL_TEXTURES` input wires to, and absent, with the reason, while

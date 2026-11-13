@@ -17,24 +17,33 @@
 //! [`helio_core::FrameInputPublisher`]): the renderer facade knows no
 //! material, and without the plugin a kind's drawer binds the stand-in
 //! (`helio_mats::MaterialStandIn`: default grey PBR).
+//!
+//! The same feature owns the shading-cost view ([`cost`]): the one place
+//! that knows the materials' light loop, drawn for the frame's
+//! shader-complexity overlay mode and as a debug view.
+
+pub mod cost;
 
 use std::sync::{Arc, RwLock};
 
 use helio_core::{FrameInputContext, FrameInputPublisher, ResourceRegistry};
-use helio_feature_api::{Feature, FeatureRegistrar, NodeDescriptor};
-use helio_frame_api::{host_kind, HOST_INPUTS};
+use helio_feature_api::{pass_node, Feature, FeatureRegistrar, NodeDescriptor};
+use helio_frame_api::diagnostics::PerfOverlayMode;
+use helio_frame_api::{host_kind, FrameNode, Slot, HOST_INPUTS};
 use helio_mats::{MaterialSampler, MaterialTextureTable, MATERIAL_TEXTURES};
 use pulsar_scenedb::gpu::{GpuMirrorHandle, TextureStore};
 
 /// The materials' feature: the texture table ([`SceneMaterialTextures`]).
 pub struct MaterialsFeature;
 
-/// The materials' surface for the frame's shading-cost probe (the default
-/// PBR's BRDF through `pbr_eval`), under the frame's marker.
-pub const SURFACE_PROBE: helio_core::shader::ShaderSnippet = helio_core::wgsl_snippet!(
-    helio_frame_api::diagnostics::SURFACE_PROBE_MARKER,
-    "../shaders/surface_probe.wgsl"
-);
+/// Marker of [`SURFACE_PROBE`].
+pub const SURFACE_PROBE_MARKER: &str = "//!use materials_surface_probe";
+
+/// The materials' surface for the shading-cost view's test patch: the
+/// default PBR's BRDF through `pbr_eval`, the reflected radiance per unit
+/// light.
+pub const SURFACE_PROBE: helio_core::shader::ShaderSnippet =
+    helio_core::wgsl_snippet!(SURFACE_PROBE_MARKER, "../shaders/surface_probe.wgsl");
 
 impl Feature for MaterialsFeature {
     fn id(&self) -> &'static str {
@@ -42,15 +51,33 @@ impl Feature for MaterialsFeature {
     }
 
     fn register(&self, registrar: &mut FeatureRegistrar<'_>) {
-        // What the performance overlay times as a surface's shading cost.
-        registrar.prepare(Arc::new(|env| {
-            helio_frame_api::diagnostics::offer_surface_probe(
-                env,
-                helio_frame_api::diagnostics::SurfaceProbe {
-                    snippets: vec![SURFACE_PROBE, helio_mats::PBR_EVAL_SNIPPET],
+        // The shading-cost view, at the display slot before the overlay. It
+        // joins the graph while the overlay mode or the debug view names it,
+        // and only where a lighting model offered the tile counts it reads.
+        registrar.node(
+            pass_node(
+                "shading_cost",
+                "Output: Shading Cost",
+                "Passes: Output",
+                "Draws what each lit pixel costs to shade, measured on the materials' test patch.",
+                |build| {
+                    let counter = helio_frame_api::diagnostics::tile_counter(build.env);
+                    let mode = build
+                        .env
+                        .setting::<PerfOverlayMode>()
+                        .copied()
+                        .unwrap_or_default();
+                    build.graph.add_pass(Box::new(cost::ShadingCostPass::new(
+                        counter,
+                        mode,
+                        build.env.frame.surface_format,
+                        build.env.frame.render_size(),
+                    )));
+                    Ok(())
                 },
-            );
-        }));
+            )
+            .in_slot(Slot::Display, 19),
+        );
         // The host input's node (the kind `helio_frame_api::host_input`
         // gives it): it declares the input and supplies it.
         registrar.node(

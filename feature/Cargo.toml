@@ -12,7 +12,9 @@ helio-feature-api = { workspace = true }
 helio-frame-api = { workspace = true }
 pulsar_scenedb = { workspace = true }
 wgpu = { workspace = true }
+bytemuck = { workspace = true }
 log = { workspace = true }
 
 [dev-dependencies]
 pollster = "0.4"
+naga = { version = "30", features = ["wgsl-in"] }
