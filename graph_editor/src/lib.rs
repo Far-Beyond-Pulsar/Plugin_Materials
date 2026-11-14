@@ -103,6 +103,7 @@ pub fn file_types() -> Vec<FileTypeDefinition> {
             }
         }),
         creation_directory: None,
+        cook: plugin_editor_api::file_types::copy_file_for_cook,
 
         categories: vec!["Shaders".to_string()],
     }]
