@@ -1,0 +1,489 @@
+// Example material: Checker.
+// A two-colour checkerboard: the smallest useful procedural material.
+// Open the folder in the Material Graph Editor; the graph is the JSON below.
+// Lines starting with // before the JSON are ignored by the loader.
+
+{
+  "format_version": 1,
+  "main_graph": {
+    "metadata": {
+      "name": "Checker",
+      "description": "A two-colour checkerboard: the smallest useful procedural material.",
+      "version": "1.0.0",
+      "created_at": "2025-01-01T00:00:00+00:00",
+      "modified_at": "2025-01-01T00:00:00+00:00"
+    },
+    "nodes": {
+      "light": {
+        "id": "light",
+        "node_type": "constant_vec4",
+        "position": {
+          "x": 0.0,
+          "y": 320.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "y",
+            "pin": {
+              "id": "y",
+              "name": "y",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "z",
+            "pin": {
+              "id": "z",
+              "name": "z",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "w",
+            "pin": {
+              "id": "w",
+              "name": "w",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "z": 0.88,
+          "y": 0.92,
+          "w": 1.0,
+          "x": 0.92
+        }
+      },
+      "checker": {
+        "id": "checker",
+        "node_type": "checkerboard",
+        "position": {
+          "x": 360.0,
+          "y": 80.0
+        },
+        "inputs": [
+          {
+            "id": "uv",
+            "pin": {
+              "id": "uv",
+              "name": "uv",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "scale",
+            "pin": {
+              "id": "scale",
+              "name": "scale",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "color_a",
+            "pin": {
+              "id": "color_a",
+              "name": "color_a",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "color_b",
+            "pin": {
+              "id": "color_b",
+              "name": "color_b",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "scale": 8.0
+        }
+      },
+      "dark": {
+        "id": "dark",
+        "node_type": "constant_vec4",
+        "position": {
+          "x": 0.0,
+          "y": 160.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "y",
+            "pin": {
+              "id": "y",
+              "name": "y",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "z",
+            "pin": {
+              "id": "z",
+              "name": "z",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "w",
+            "pin": {
+              "id": "w",
+              "name": "w",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "x": 0.05,
+          "z": 0.06,
+          "y": 0.05,
+          "w": 1.0
+        }
+      },
+      "output": {
+        "id": "output",
+        "node_type": "fragment_output",
+        "position": {
+          "x": 700.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "base_color",
+            "pin": {
+              "id": "base_color",
+              "name": "base_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "metallic",
+            "pin": {
+              "id": "metallic",
+              "name": "metallic",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "roughness",
+            "pin": {
+              "id": "roughness",
+              "name": "roughness",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "emissive_color",
+            "pin": {
+              "id": "emissive_color",
+              "name": "emissive_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "normal",
+            "pin": {
+              "id": "normal",
+              "name": "normal",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec3<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "ambient_occlusion",
+            "pin": {
+              "id": "ambient_occlusion",
+              "name": "ambient_occlusion",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity",
+            "pin": {
+              "id": "opacity",
+              "name": "opacity",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity_mask",
+            "pin": {
+              "id": "opacity_mask",
+              "name": "opacity_mask",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [],
+        "properties": {
+          "metallic": 0.0,
+          "roughness": 0.6
+        }
+      },
+      "uv": {
+        "id": "uv",
+        "node_type": "frag_uv",
+        "position": {
+          "x": 0.0,
+          "y": 0.0
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      }
+    },
+    "connections": [
+      {
+        "source_node": "uv",
+        "source_pin": "result",
+        "target_node": "checker",
+        "target_pin": "uv",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "dark",
+        "source_pin": "result",
+        "target_node": "checker",
+        "target_pin": "color_a",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "light",
+        "source_pin": "result",
+        "target_node": "checker",
+        "target_pin": "color_b",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "checker",
+        "source_pin": "result",
+        "target_node": "output",
+        "target_pin": "base_color",
+        "connection_type": "Data"
+      }
+    ],
+    "comments": [
+      {
+        "id": "note1",
+        "text": "Checkerboard: scale is the number of squares across the UV range. Edit the two colour constants to restyle it.",
+        "position": {
+          "x": 340.0,
+          "y": 20.0
+        },
+        "size": [
+          300.0,
+          220.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "checker"
+        ]
+      },
+      {
+        "id": "note2",
+        "text": "Unconnected output pins use material defaults; roughness and metallic here are typed in on the output node.",
+        "position": {
+          "x": 680.0,
+          "y": -90.0
+        },
+        "size": [
+          320.0,
+          80.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "output"
+        ]
+      }
+    ]
+  },
+  "shader_metadata": {
+    "shader_model": "Standard_unlit",
+    "stage": "Fragment",
+    "description": "A two-colour checkerboard: the smallest useful procedural material.",
+    "category": "Examples"
+  }
+}

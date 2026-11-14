@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "base_color": [
+    0.08,
+    0.08,
+    0.09,
+    1.0
+  ],
+  "metallic": 0.0,
+  "roughness": 0.95,
+  "emissive_color": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "emissive_intensity": 0.0,
+  "alpha": 1.0
+}

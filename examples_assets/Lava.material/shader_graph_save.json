@@ -1,0 +1,918 @@
+// Example material: Lava.
+// Animated: reads the frame clock (time) to scroll voronoi cells; emissive glows.
+// Shows animation, vec3 component extraction, and the emissive output.
+
+{
+  "format_version": 1,
+  "main_graph": {
+    "metadata": {
+      "name": "Lava",
+      "description": "Animated lava: scrolling noise drives a glowing emissive.",
+      "version": "1.0.0",
+      "created_at": "2025-01-01T00:00:00+00:00",
+      "modified_at": "2025-01-01T00:00:00+00:00"
+    },
+    "nodes": {
+      "scroll": {
+        "id": "scroll",
+        "node_type": "panner",
+        "position": {
+          "x": 280.0,
+          "y": 60.0
+        },
+        "inputs": [
+          {
+            "id": "uv",
+            "pin": {
+              "id": "uv",
+              "name": "uv",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "speed",
+            "pin": {
+              "id": "speed",
+              "name": "speed",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "time",
+            "pin": {
+              "id": "time",
+              "name": "time",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "magma": {
+        "id": "magma",
+        "node_type": "constant_vec4",
+        "position": {
+          "x": 800.0,
+          "y": 380.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "y",
+            "pin": {
+              "id": "y",
+              "name": "y",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "z",
+            "pin": {
+              "id": "z",
+              "name": "z",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "w",
+            "pin": {
+              "id": "w",
+              "name": "w",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "z": 0.05,
+          "x": 1.0,
+          "w": 1.0,
+          "y": 0.35
+        }
+      },
+      "glow": {
+        "id": "glow",
+        "node_type": "color_multiply",
+        "position": {
+          "x": 1030.0,
+          "y": 480.0
+        },
+        "inputs": [
+          {
+            "id": "color",
+            "pin": {
+              "id": "color",
+              "name": "color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "factor",
+            "pin": {
+              "id": "factor",
+              "name": "factor",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "factor": 2.0
+        }
+      },
+      "speed": {
+        "id": "speed",
+        "node_type": "constant_vec2",
+        "position": {
+          "x": 0.0,
+          "y": 380.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "y",
+            "pin": {
+              "id": "y",
+              "name": "y",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "x": 0.03,
+          "y": 0.06
+        }
+      },
+      "time": {
+        "id": "time",
+        "node_type": "time",
+        "position": {
+          "x": 0.0,
+          "y": 200.0
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "hot": {
+        "id": "hot",
+        "node_type": "pow",
+        "position": {
+          "x": 1000.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "base",
+            "pin": {
+              "id": "base",
+              "name": "base",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "exponent",
+            "pin": {
+              "id": "exponent",
+              "name": "exponent",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "exponent": 2.5
+        }
+      },
+      "mask": {
+        "id": "mask",
+        "node_type": "vec3_x",
+        "position": {
+          "x": 800.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "v",
+            "pin": {
+              "id": "v",
+              "name": "v",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec3<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "output": {
+        "id": "output",
+        "node_type": "fragment_output",
+        "position": {
+          "x": 1300.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "base_color",
+            "pin": {
+              "id": "base_color",
+              "name": "base_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "metallic",
+            "pin": {
+              "id": "metallic",
+              "name": "metallic",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "roughness",
+            "pin": {
+              "id": "roughness",
+              "name": "roughness",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "emissive_color",
+            "pin": {
+              "id": "emissive_color",
+              "name": "emissive_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "normal",
+            "pin": {
+              "id": "normal",
+              "name": "normal",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec3<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "ambient_occlusion",
+            "pin": {
+              "id": "ambient_occlusion",
+              "name": "ambient_occlusion",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity",
+            "pin": {
+              "id": "opacity",
+              "name": "opacity",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity_mask",
+            "pin": {
+              "id": "opacity_mask",
+              "name": "opacity_mask",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [],
+        "properties": {
+          "metallic": 0.0,
+          "roughness": 0.9
+        }
+      },
+      "uv": {
+        "id": "uv",
+        "node_type": "frag_uv",
+        "position": {
+          "x": 0.0,
+          "y": 0.0
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "cells": {
+        "id": "cells",
+        "node_type": "voronoi_2d",
+        "position": {
+          "x": 560.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "p",
+            "pin": {
+              "id": "p",
+              "name": "p",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "scale",
+            "pin": {
+              "id": "scale",
+              "name": "scale",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "seed",
+            "pin": {
+              "id": "seed",
+              "name": "seed",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec3<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "scale": 4.0,
+          "seed": 3.0
+        }
+      },
+      "mix": {
+        "id": "mix",
+        "node_type": "color_lerp",
+        "position": {
+          "x": 1030.0,
+          "y": 260.0
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "pin": {
+              "id": "a",
+              "name": "a",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "b",
+            "pin": {
+              "id": "b",
+              "name": "b",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "t",
+            "pin": {
+              "id": "t",
+              "name": "t",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "crust": {
+        "id": "crust",
+        "node_type": "constant_vec4",
+        "position": {
+          "x": 800.0,
+          "y": 200.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "y",
+            "pin": {
+              "id": "y",
+              "name": "y",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "z",
+            "pin": {
+              "id": "z",
+              "name": "z",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "w",
+            "pin": {
+              "id": "w",
+              "name": "w",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "x": 0.06,
+          "y": 0.02,
+          "w": 1.0,
+          "z": 0.01
+        }
+      }
+    },
+    "connections": [
+      {
+        "source_node": "uv",
+        "source_pin": "result",
+        "target_node": "scroll",
+        "target_pin": "uv",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "time",
+        "source_pin": "result",
+        "target_node": "scroll",
+        "target_pin": "time",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "speed",
+        "source_pin": "result",
+        "target_node": "scroll",
+        "target_pin": "speed",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "scroll",
+        "source_pin": "result",
+        "target_node": "cells",
+        "target_pin": "p",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "cells",
+        "source_pin": "result",
+        "target_node": "mask",
+        "target_pin": "v",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "mask",
+        "source_pin": "result",
+        "target_node": "hot",
+        "target_pin": "base",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "crust",
+        "source_pin": "result",
+        "target_node": "mix",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "magma",
+        "source_pin": "result",
+        "target_node": "mix",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "hot",
+        "source_pin": "result",
+        "target_node": "mix",
+        "target_pin": "t",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "mix",
+        "source_pin": "result",
+        "target_node": "output",
+        "target_pin": "base_color",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "mix",
+        "source_pin": "result",
+        "target_node": "glow",
+        "target_pin": "color",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "glow",
+        "source_pin": "result",
+        "target_node": "output",
+        "target_pin": "emissive_color",
+        "connection_type": "Data"
+      }
+    ],
+    "comments": [
+      {
+        "id": "note1",
+        "text": "Animation: the time node is the frame clock; panner offsets the UVs by speed * time, so the material redraws every frame.",
+        "position": {
+          "x": 0.0,
+          "y": 0.0
+        },
+        "size": [
+          520.0,
+          520.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "uv",
+          "time",
+          "scroll",
+          "speed"
+        ]
+      },
+      {
+        "id": "note2",
+        "text": "Cells: voronoi_2d returns a vec3; its x component is the distance to the nearest cell centre, used as a heat mask.",
+        "position": {
+          "x": 540.0,
+          "y": -80.0
+        },
+        "size": [
+          700.0,
+          260.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "cells",
+          "mask",
+          "hot"
+        ]
+      },
+      {
+        "id": "note3",
+        "text": "The same blended colour is multiplied up and sent to emissive, so the hot parts glow.",
+        "position": {
+          "x": 780.0,
+          "y": 160.0
+        },
+        "size": [
+          500.0,
+          500.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "crust",
+          "magma",
+          "mix",
+          "glow"
+        ]
+      }
+    ]
+  },
+  "shader_metadata": {
+    "shader_model": "Standard_unlit",
+    "stage": "Fragment",
+    "description": "Animated lava with emissive glow.",
+    "category": "Examples"
+  }
+}

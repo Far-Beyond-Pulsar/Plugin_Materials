@@ -33,6 +33,7 @@ pulsar_plugins::installed!("pulsar-plugin.toml", build);
 /// feature).
 pub fn build(p: &mut pulsar_plugins::PluginBuilder) {
     runtime::build(p);
+    examples::build(p);
     #[cfg(feature = "editor")]
     editor::build(p);
 }
@@ -42,6 +43,9 @@ pub use materials_component;
 pub use materials_editor;
 
 pub mod runtime;
+
+/// The plugin's example materials, served as `examples/` in its folder.
+mod examples;
 
 #[cfg(feature = "editor")]
 pub mod editor;

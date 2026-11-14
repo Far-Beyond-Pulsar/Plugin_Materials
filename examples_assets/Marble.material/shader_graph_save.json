@@ -1,0 +1,879 @@
+// Example material: Marble.
+// Procedural veined marble: fbm noise, a sine for banding, smoothstep to sharpen, colour lerp.
+// Shows noise, math and colour nodes feeding base colour and roughness.
+
+{
+  "format_version": 1,
+  "main_graph": {
+    "metadata": {
+      "name": "Marble",
+      "description": "Veined marble: fbm noise bent by a sine, mapped between two stone colours.",
+      "version": "1.0.0",
+      "created_at": "2025-01-01T00:00:00+00:00",
+      "modified_at": "2025-01-01T00:00:00+00:00"
+    },
+    "nodes": {
+      "wave": {
+        "id": "wave",
+        "node_type": "sin",
+        "position": {
+          "x": 800.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "uv": {
+        "id": "uv",
+        "node_type": "frag_uv",
+        "position": {
+          "x": 0.0,
+          "y": 0.0
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "vein": {
+        "id": "vein",
+        "node_type": "smoothstep",
+        "position": {
+          "x": 1000.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "edge0",
+            "pin": {
+              "id": "edge0",
+              "name": "edge0",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "edge1",
+            "pin": {
+              "id": "edge1",
+              "name": "edge1",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "edge1": 0.9,
+          "edge0": -0.2
+        }
+      },
+      "mix": {
+        "id": "mix",
+        "node_type": "color_lerp",
+        "position": {
+          "x": 1050.0,
+          "y": 250.0
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "pin": {
+              "id": "a",
+              "name": "a",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "b",
+            "pin": {
+              "id": "b",
+              "name": "b",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "t",
+            "pin": {
+              "id": "t",
+              "name": "t",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "stretch": {
+        "id": "stretch",
+        "node_type": "multiply",
+        "position": {
+          "x": 600.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "pin": {
+              "id": "a",
+              "name": "a",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "b",
+            "pin": {
+              "id": "b",
+              "name": "b",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "b": 6.0
+        }
+      },
+      "dark": {
+        "id": "dark",
+        "node_type": "constant_vec4",
+        "position": {
+          "x": 800.0,
+          "y": 380.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "y",
+            "pin": {
+              "id": "y",
+              "name": "y",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "z",
+            "pin": {
+              "id": "z",
+              "name": "z",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "w",
+            "pin": {
+              "id": "w",
+              "name": "w",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "y": 0.19,
+          "z": 0.22,
+          "x": 0.18,
+          "w": 1.0
+        }
+      },
+      "gloss": {
+        "id": "gloss",
+        "node_type": "lerp",
+        "position": {
+          "x": 1050.0,
+          "y": 520.0
+        },
+        "inputs": [
+          {
+            "id": "a",
+            "pin": {
+              "id": "a",
+              "name": "a",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "b",
+            "pin": {
+              "id": "b",
+              "name": "b",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "t",
+            "pin": {
+              "id": "t",
+              "name": "t",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "a": 0.15,
+          "b": 0.35
+        }
+      },
+      "output": {
+        "id": "output",
+        "node_type": "fragment_output",
+        "position": {
+          "x": 1300.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "base_color",
+            "pin": {
+              "id": "base_color",
+              "name": "base_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "metallic",
+            "pin": {
+              "id": "metallic",
+              "name": "metallic",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "roughness",
+            "pin": {
+              "id": "roughness",
+              "name": "roughness",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "emissive_color",
+            "pin": {
+              "id": "emissive_color",
+              "name": "emissive_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "normal",
+            "pin": {
+              "id": "normal",
+              "name": "normal",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec3<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "ambient_occlusion",
+            "pin": {
+              "id": "ambient_occlusion",
+              "name": "ambient_occlusion",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity",
+            "pin": {
+              "id": "opacity",
+              "name": "opacity",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity_mask",
+            "pin": {
+              "id": "opacity_mask",
+              "name": "opacity_mask",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [],
+        "properties": {
+          "metallic": 0.0
+        }
+      },
+      "stone": {
+        "id": "stone",
+        "node_type": "constant_vec4",
+        "position": {
+          "x": 800.0,
+          "y": 200.0
+        },
+        "inputs": [
+          {
+            "id": "x",
+            "pin": {
+              "id": "x",
+              "name": "x",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "y",
+            "pin": {
+              "id": "y",
+              "name": "y",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "z",
+            "pin": {
+              "id": "z",
+              "name": "z",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "w",
+            "pin": {
+              "id": "w",
+              "name": "w",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "y": 0.92,
+          "w": 1.0,
+          "x": 0.93,
+          "z": 0.9
+        }
+      },
+      "fbm": {
+        "id": "fbm",
+        "node_type": "fbm_2d",
+        "position": {
+          "x": 300.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "p",
+            "pin": {
+              "id": "p",
+              "name": "p",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "scale",
+            "pin": {
+              "id": "scale",
+              "name": "scale",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "seed",
+            "pin": {
+              "id": "seed",
+              "name": "seed",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "octaves",
+            "pin": {
+              "id": "octaves",
+              "name": "octaves",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "lacunarity",
+            "pin": {
+              "id": "lacunarity",
+              "name": "lacunarity",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "gain",
+            "pin": {
+              "id": "gain",
+              "name": "gain",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "lacunarity": 2.0,
+          "octaves": 5.0,
+          "seed": 7.0,
+          "gain": 0.5,
+          "scale": 3.0
+        }
+      }
+    },
+    "connections": [
+      {
+        "source_node": "uv",
+        "source_pin": "result",
+        "target_node": "fbm",
+        "target_pin": "p",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "fbm",
+        "source_pin": "result",
+        "target_node": "stretch",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "stretch",
+        "source_pin": "result",
+        "target_node": "wave",
+        "target_pin": "x",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "wave",
+        "source_pin": "result",
+        "target_node": "vein",
+        "target_pin": "x",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "dark",
+        "source_pin": "result",
+        "target_node": "mix",
+        "target_pin": "a",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "stone",
+        "source_pin": "result",
+        "target_node": "mix",
+        "target_pin": "b",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "vein",
+        "source_pin": "result",
+        "target_node": "mix",
+        "target_pin": "t",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "mix",
+        "source_pin": "result",
+        "target_node": "output",
+        "target_pin": "base_color",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "vein",
+        "source_pin": "result",
+        "target_node": "gloss",
+        "target_pin": "t",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "gloss",
+        "source_pin": "result",
+        "target_node": "output",
+        "target_pin": "roughness",
+        "connection_type": "Data"
+      }
+    ],
+    "comments": [
+      {
+        "id": "note1",
+        "text": "Noise: fbm_2d layers 5 octaves of noise. scale sets how big the veins are, seed picks another pattern.",
+        "position": {
+          "x": 280.0,
+          "y": -80.0
+        },
+        "size": [
+          280.0,
+          260.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "fbm"
+        ]
+      },
+      {
+        "id": "note2",
+        "text": "Shaping: scale the noise, take its sine for repeating bands, then smoothstep to sharpen them into veins.",
+        "position": {
+          "x": 580.0,
+          "y": -80.0
+        },
+        "size": [
+          600.0,
+          260.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "stretch",
+          "wave",
+          "vein"
+        ]
+      },
+      {
+        "id": "note3",
+        "text": "Colour: the vein mask picks between the dark and light stone. The same mask makes the dark veins slightly rougher.",
+        "position": {
+          "x": 780.0,
+          "y": 160.0
+        },
+        "size": [
+          500.0,
+          500.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "stone",
+          "dark",
+          "mix",
+          "gloss"
+        ]
+      }
+    ]
+  },
+  "shader_metadata": {
+    "shader_model": "Standard_unlit",
+    "stage": "Fragment",
+    "description": "Veined marble from layered noise.",
+    "category": "Examples"
+  }
+}

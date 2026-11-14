@@ -1,0 +1,343 @@
+// Example material: TexturedTint.
+// Samples textures/albedo.png (a project-relative path) and brightens it.
+// The image is not shipped with the example: point the sample_texture node at one of yours.
+
+{
+  "format_version": 1,
+  "main_graph": {
+    "metadata": {
+      "name": "TexturedTint",
+      "description": "Samples an albedo texture and tints it.",
+      "version": "1.0.0",
+      "created_at": "2025-01-01T00:00:00+00:00",
+      "modified_at": "2025-01-01T00:00:00+00:00"
+    },
+    "nodes": {
+      "uv": {
+        "id": "uv",
+        "node_type": "frag_uv",
+        "position": {
+          "x": 0.0,
+          "y": 0.0
+        },
+        "inputs": [],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {}
+      },
+      "tint": {
+        "id": "tint",
+        "node_type": "color_multiply",
+        "position": {
+          "x": 620.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "color",
+            "pin": {
+              "id": "color",
+              "name": "color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "factor",
+            "pin": {
+              "id": "factor",
+              "name": "factor",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "factor": 1.2
+        }
+      },
+      "output": {
+        "id": "output",
+        "node_type": "fragment_output",
+        "position": {
+          "x": 900.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "base_color",
+            "pin": {
+              "id": "base_color",
+              "name": "base_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "metallic",
+            "pin": {
+              "id": "metallic",
+              "name": "metallic",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "roughness",
+            "pin": {
+              "id": "roughness",
+              "name": "roughness",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "emissive_color",
+            "pin": {
+              "id": "emissive_color",
+              "name": "emissive_color",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "normal",
+            "pin": {
+              "id": "normal",
+              "name": "normal",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec3<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "ambient_occlusion",
+            "pin": {
+              "id": "ambient_occlusion",
+              "name": "ambient_occlusion",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity",
+            "pin": {
+              "id": "opacity",
+              "name": "opacity",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "opacity_mask",
+            "pin": {
+              "id": "opacity_mask",
+              "name": "opacity_mask",
+              "data_type": {
+                "Data": {
+                  "type_string": "f32"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [],
+        "properties": {
+          "roughness": 0.5,
+          "metallic": 0.0
+        }
+      },
+      "sample": {
+        "id": "sample",
+        "node_type": "sample_texture",
+        "position": {
+          "x": 300.0,
+          "y": 0.0
+        },
+        "inputs": [
+          {
+            "id": "texture",
+            "pin": {
+              "id": "texture",
+              "name": "texture",
+              "data_type": {
+                "Data": {
+                  "type_string": "TextureSrc"
+                }
+              },
+              "pin_type": "Input"
+            }
+          },
+          {
+            "id": "uv",
+            "pin": {
+              "id": "uv",
+              "name": "uv",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec2<f32>"
+                }
+              },
+              "pin_type": "Input"
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "id": "result",
+            "pin": {
+              "id": "result",
+              "name": "result",
+              "data_type": {
+                "Data": {
+                  "type_string": "vec4<f32>"
+                }
+              },
+              "pin_type": "Output"
+            }
+          }
+        ],
+        "properties": {
+          "texture": "textures/albedo.png"
+        }
+      }
+    },
+    "connections": [
+      {
+        "source_node": "uv",
+        "source_pin": "result",
+        "target_node": "sample",
+        "target_pin": "uv",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "sample",
+        "source_pin": "result",
+        "target_node": "tint",
+        "target_pin": "color",
+        "connection_type": "Data"
+      },
+      {
+        "source_node": "tint",
+        "source_pin": "result",
+        "target_node": "output",
+        "target_pin": "base_color",
+        "connection_type": "Data"
+      }
+    ],
+    "comments": [
+      {
+        "id": "note1",
+        "text": "texture is a project-relative path (here textures/albedo.png). Put an image there, or edit the path on the node, before drawing with this material; a missing image fails the load.",
+        "position": {
+          "x": 280.0,
+          "y": -120.0
+        },
+        "size": [
+          560.0,
+          120.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "sample"
+        ]
+      },
+      {
+        "id": "note2",
+        "text": "color_multiply scales the sampled colour; here a 20% brightness lift.",
+        "position": {
+          "x": 600.0,
+          "y": 150.0
+        },
+        "size": [
+          260.0,
+          80.0
+        ],
+        "color": [
+          0.5799999833106995,
+          0.3499999940395355,
+          0.25,
+          0.3499999940395355
+        ],
+        "contained_node_ids": [
+          "tint"
+        ]
+      }
+    ]
+  },
+  "shader_metadata": {
+    "shader_model": "Standard_unlit",
+    "stage": "Fragment",
+    "description": "A sampled albedo texture with a brightness tint.",
+    "category": "Examples"
+  }
+}
