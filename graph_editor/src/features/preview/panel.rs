@@ -3,8 +3,9 @@
 use gpui::*;
 use ui::dock::{Panel, PanelEvent};
 use ui::{
+    ActiveTheme, IconName,
     button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, IconName,
+    h_flex, v_flex,
 };
 
 use super::mesh::{self, PreviewMeshData};

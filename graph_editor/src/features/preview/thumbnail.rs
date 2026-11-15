@@ -3,7 +3,7 @@
 use super::{mesh, renderer::PreviewRenderer};
 use crate::io::formats::deserialize_shader;
 use image::RgbaImage;
-use materials_component::graph_preview::{compile_graph, GraphPreview};
+use materials_component::graph_preview::{GraphPreview, compile_graph};
 use std::path::Path;
 
 const THUMBNAIL_SIZE: u32 = 128;
@@ -172,7 +172,7 @@ fn config_size(config: &wgpu::SurfaceConfiguration) -> wgpu::Extent3d {
 mod tests {
     use super::render_material_thumbnail;
     use crate::definitions::NodeDefinitions;
-    use crate::io::formats::{serialize_shader_with_header, ShaderAsset};
+    use crate::io::formats::{ShaderAsset, serialize_shader_with_header};
     use psgc::{
         Connection, ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType,
         Position,
@@ -242,8 +242,10 @@ mod tests {
         let _ = std::fs::remove_file(PathBuf::from(&path));
         let thumbnail = thumbnail.expect("material hook should render the test material");
         assert_eq!(thumbnail.dimensions(), (128, 128));
-        assert!(thumbnail
-            .pixels()
-            .any(|pixel| pixel[0] > 180 && pixel[2] > 180 && pixel[1] < 80));
+        assert!(
+            thumbnail
+                .pixels()
+                .any(|pixel| pixel[0] > 180 && pixel[2] > 180 && pixel[1] < 80)
+        );
     }
 }

@@ -19,8 +19,9 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use ui::{
+    ActiveTheme, Disableable, Icon, IconName,
     button::{Button, ButtonVariants as _},
-    h_flex, ActiveTheme, Disableable, Icon, IconName,
+    h_flex,
 };
 
 use crate::actions::{AddGraphComment, CompileShader, ReloadShaderFromDisk};
@@ -211,11 +212,7 @@ impl ToolbarRenderer {
                             .update(cx, |canvas, cx| canvas.refresh_scene(cx));
                         cx.notify();
                     }));
-                if previews_on {
-                    btn.primary()
-                } else {
-                    btn
-                }
+                if previews_on { btn.primary() } else { btn }
             }))
             // ── Group 6 · Shader Model & Preview ─────────────────────────────
             .child(

@@ -2,7 +2,7 @@
 //!
 //! Defines the built-in shader models that ship with the editor.
 
-use super::{register, ShaderModel, ShaderModelInput};
+use super::{ShaderModel, ShaderModelInput, register};
 
 pub fn register_standard_models() {
     register(ShaderModel {

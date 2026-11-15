@@ -14,7 +14,7 @@ use serde_json::Value;
 use std::any::Any;
 use std::sync::Arc;
 use ui::input::{InputEvent, InputState, TextInput};
-use ui::{h_flex, v_flex, ActiveTheme as _, IconName, StyledExt};
+use ui::{ActiveTheme as _, IconName, StyledExt, h_flex, v_flex};
 use ui_common::reflected_properties_panel::rgba_to_hsla;
 
 use crate::definitions::NodeDefinitions;

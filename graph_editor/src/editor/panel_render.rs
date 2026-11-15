@@ -3,10 +3,11 @@
 use gpui::prelude::*;
 use gpui::*;
 use ui::{
+    ActiveTheme,
     dock::{Panel, PanelEvent, PanelState},
     h_flex,
     scroll::Scrollbar,
-    v_flex, v_virtual_list, ActiveTheme,
+    v_flex, v_virtual_list,
 };
 
 use super::panel::ShaderEditorPanel;

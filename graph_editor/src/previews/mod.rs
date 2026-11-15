@@ -11,13 +11,13 @@
 pub mod renderer;
 
 use std::cell::{Cell, RefCell};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use gpui::*;
@@ -25,8 +25,8 @@ use graphy::GraphDescription;
 use graphy_gpui::canvas::GraphCanvas;
 
 use crate::editor::panel::ShaderEditorPanel;
-use crate::features::compilation::lowering::{node_title, pin_preview_graph};
 use crate::features::compilation::CompilationState;
+use crate::features::compilation::lowering::{node_title, pin_preview_graph};
 use crate::types::{is_texture_previewable, type_name};
 use renderer::PinPreviewRenderer;
 
@@ -549,7 +549,7 @@ fn frame_driver(entity: &Entity<PinPreview>, current: &Rc<Cell<u64>>) -> gpui::D
 
 #[cfg(test)]
 mod tests {
-    use super::{graph_preview_signature, PreviewDebounce, PIN_PREVIEW_DEBOUNCE};
+    use super::{PIN_PREVIEW_DEBOUNCE, PreviewDebounce, graph_preview_signature};
     use graphy::GraphDescription;
     use std::time::{Duration, Instant};
 

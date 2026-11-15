@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
-use graphy::core::GraphComment;
 use graphy::ConnectionType;
+use graphy::core::GraphComment;
 use graphy::{Connection, GraphDescription, NodeInstance, PinInstance, Position};
 use plugin_editor_api::{AiToolDefinition, PluginError};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};

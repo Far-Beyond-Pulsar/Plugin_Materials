@@ -103,10 +103,53 @@ pub fn file_types() -> Vec<FileTypeDefinition> {
             }
         }),
         creation_directory: None,
-        cook: plugin_editor_api::file_types::copy_file_for_cook,
+        cook: material_graph_cook,
 
         categories: vec!["Shaders".to_string()],
     }]
+}
+
+/// Shader graph materials reference their sampled images by path or stable
+/// texture id. Resolve ids through the project's asset index before returning
+/// edges to the package dependency walker.
+fn material_graph_dependencies(
+    context: &plugin_editor_api::CookContext<'_>,
+) -> Result<plugin_editor_api::file_types::CookOutput, String> {
+    let cooked = plugin_editor_api::file_types::copy_folder_for_cook(context)?;
+    let graph_path = context.source_path.join("shader_graph_save.json");
+    let bytes = engine_fs::virtual_fs::read_file(&graph_path)
+        .map_err(|error| format!("{}: {error}", graph_path.display()))?;
+    let text = std::str::from_utf8(&bytes).map_err(|error| error.to_string())?;
+    let start = text
+        .find('{')
+        .ok_or_else(|| format!("{} has no graph JSON object", graph_path.display()))?;
+    let document: serde_json::Value = serde_json::from_str(&text[start..])
+        .map_err(|error| format!("{}: {error}", graph_path.display()))?;
+    let graph_value = document
+        .get("main_graph")
+        .ok_or_else(|| format!("{} has no main_graph", graph_path.display()))?;
+    let graph: psgc::GraphDescription = serde_json::from_value(graph_value.clone())
+        .map_err(|error| format!("{}: {error}", graph_path.display()))?;
+    let dependencies = materials_component::graph::texture_assets(&graph).map(|textures| {
+        textures
+            .iter()
+            .map(|texture| {
+                materials_component::graph::texture_path(texture, Some(context.project_root))
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect()
+    })?;
+    Ok(plugin_editor_api::file_types::CookOutput::new(
+        cooked.files,
+        dependencies,
+    ))
+}
+
+fn material_graph_cook(
+    context: &plugin_editor_api::CookContext<'_>,
+) -> Result<plugin_editor_api::file_types::CookOutput, String> {
+    material_graph_dependencies(context)
 }
 
 /// The material graph editor, for `.material` assets.

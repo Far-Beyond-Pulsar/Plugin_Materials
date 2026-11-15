@@ -6,8 +6,8 @@
 //! pins, and the preview rows. It owns no drawing, layout or hit-testing: a preview
 //! is an [`ExtraRow`] with a height, and Graphy lays the node out around it.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::{AnyElement, App, Window};
 use graphy::{DataType, NodeInstance, Pin, PinInstance, PinType, Position, TypeResolver};
@@ -15,13 +15,13 @@ use graphy_gpui::canvas::GpuiProfile;
 use graphy_gpui::{CatalogEntry, GraphProfile};
 use graphy_render::geom::rgba;
 use graphy_render::{
-    category_accent, Color, ExtraRow, NodePresentation, PinShape, PinSide, PinStyle, Presenter,
-    RowPosition,
+    Color, ExtraRow, NodePresentation, PinShape, PinSide, PinStyle, Presenter, RowPosition,
+    category_accent,
 };
 use serde_json::Value;
 
 use crate::definitions::{NodeDefinition, NodeDefinitions};
-use crate::previews::{PinPreviews, PREVIEW_MIN_WIDTH, PREVIEW_ROW_H};
+use crate::previews::{PREVIEW_MIN_WIDTH, PREVIEW_ROW_H, PinPreviews};
 use crate::types::{is_texture_previewable, pin_color, resolver};
 
 /// `#RRGGBB` to a canvas colour.
