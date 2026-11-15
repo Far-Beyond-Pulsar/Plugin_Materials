@@ -25,8 +25,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use helio_component::asset_component::asset_source;
 use helio_component::texture_assets::LoadedTexture;
 use helio_mats::asset::{
-    MaterialAsset, MaterialPayload, ResolvedMaterial, SurfaceMaterialDocument, SurfaceValues,
-    SHADER_GRAPH_FILE,
+    MaterialAsset, MaterialPayload, ResolvedMaterial, SHADER_GRAPH_FILE, SurfaceMaterialDocument,
+    SurfaceValues,
 };
 use pulsar_scenedb::{AssetId, AssetPayload};
 
@@ -49,6 +49,8 @@ pub struct GraphMaterial {
     compiled_snippet: String,
     /// Whether the compiled surface reads the frame clock (a `time` node).
     pub reads_time: bool,
+    /// What drives the graph's cut-out coverage (`crate::graph::opacity_mask`).
+    mask: crate::graph::GraphMask,
 }
 
 /// Slot-independent compiled source plus the scene-local residency slots it
@@ -71,8 +73,14 @@ impl MaterialAsset for LoadedMaterial {
             Self::Graph(graph) => {
                 let mirror = mirror.ok_or("a material graph draws only in a scene")?;
                 let (hash, texture_slots) = compiled_graph(id, version, graph, mirror)?;
+                let mut row = fallback.row(texture_slots);
+                // A texture-masked graph cuts out in every pass at the same
+                // cutoff: its mask texture is ordinal 0, the row's base colour.
+                if let crate::graph::GraphMask::TextureAlpha(_) = graph.mask {
+                    row.flags |= helio_mats::FLAG_ALPHA_TEST;
+                }
                 Ok(ResolvedMaterial {
-                    row: fallback.row(texture_slots),
+                    row,
                     material_class: helio_mats::MATERIAL_CLASS_CUSTOM,
                     graph_hash: hash,
                 })
@@ -194,7 +202,14 @@ fn load_graph(source: &str, bytes: &[u8]) -> Result<GraphMaterial, String> {
         .map(|(slot, (asset, _, _))| (asset.clone(), slot as u32))
         .collect();
     let snippet = crate::graph::compile_material_graph(&graph, &placeholders)?;
+    let mask = crate::graph::opacity_mask(&graph);
+    if mask == crate::graph::GraphMask::Other {
+        tracing::warn!(
+            "material '{source}': its opacity mask is not a texture's alpha at the mesh UV, so it is not cut out (depth and shadow passes cannot evaluate the graph)"
+        );
+    }
     Ok(GraphMaterial {
+        mask,
         reads_time: snippet.contains("radiant_graph_time()"),
         graph,
         textures,
@@ -371,4 +386,127 @@ fn compiled_graph(
     let compiled = result.as_ref().map_err(Clone::clone)?;
     helio_mats::register_graph_source(compiled.hash, compiled.snippet.clone());
     Ok((compiled.hash, slots))
+}
+
+#[cfg(test)]
+mod full_texture_table_tests {
+    use super::*;
+    use helio_mats::asset::MaterialAsset;
+    use pulsar_scenedb::gpu::{
+        EngineGpuContext, GpuMirrorHandle, SceneGpuConfig, SceneGpuStore, TextureStore,
+    };
+    use std::sync::RwLock;
+
+    /// A graph material folder in `dir` whose base colour samples `texture`.
+    fn write_graph(dir: &Path, texture: &Path) -> PathBuf {
+        use psgc::*;
+        fn node(id: &str, kind: &str) -> NodeInstance {
+            let meta = get_shader_nodes()
+                .into_iter()
+                .find(|m| m.name == kind)
+                .unwrap_or_else(|| panic!("no shader node {kind}"));
+            let mut node = NodeInstance::new(id, kind, Position { x: 0.0, y: 0.0 });
+            for p in meta.params {
+                node.inputs.push(PinInstance::new(
+                    &p.name,
+                    Pin::new(
+                        &p.name,
+                        &p.name,
+                        DataType::Data(TypeInfo::new(&p.param_type)),
+                        PinType::Input,
+                    ),
+                ));
+            }
+            node
+        }
+        let mut graph = GraphDescription::new("full texture table");
+        graph.add_node(node("output", "fragment_output"));
+        graph.add_node(node("uv", "frag_uv"));
+        let mut sample = node("texture", "sample_texture");
+        sample.properties.insert(
+            "texture".into(),
+            serde_json::json!(texture.to_string_lossy()),
+        );
+        graph.add_node(sample);
+        for (from, to, pin) in [("uv", "texture", "uv"), ("texture", "output", "base_color")] {
+            graph.add_connection(Connection::new(
+                from,
+                "result",
+                to,
+                pin,
+                ConnectionType::Data,
+            ));
+        }
+        let folder = dir.join("wood.material");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(
+            folder.join(SHADER_GRAPH_FILE),
+            serde_json::json!({ "main_graph": graph }).to_string(),
+        )
+        .unwrap();
+        folder
+    }
+
+    fn context() -> Option<EngineGpuContext> {
+        let instance = wgpu::Instance::new(helio::wgpu_instance_descriptor());
+        let adapter = pollster::block_on(instance.request_adapter(&Default::default())).ok()?;
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&Default::default())).ok()?;
+        Some(EngineGpuContext::new(Arc::new(device), Arc::new(queue)))
+    }
+
+    /// A scene whose texture table is full (it holds no textures at all).
+    fn full_scene(ctx: &EngineGpuContext) -> GpuMirrorHandle {
+        let store = Arc::new(SceneGpuStore::new(
+            ctx,
+            SceneGpuConfig {
+                classes: vec![],
+                tombstone_headroom: 0,
+                max_cells_metadata: 0,
+            },
+        ));
+        GpuMirrorHandle::new(store, Arc::clone(ctx.queue()))
+            .with_texture_store(Arc::new(RwLock::new(TextureStore::new(0))))
+            .expect("a texture store on the mirror's device")
+    }
+
+    #[test]
+    fn a_graph_whose_texture_gets_no_slot_names_the_texture_and_the_full_table() {
+        let Some(ctx) = context() else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let dir = std::env::temp_dir().join(format!(
+            "materials-full-texture-table-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let texture = dir.join("wood_albedo.png");
+        image::save_buffer(
+            &texture,
+            &[200, 120, 40, 255],
+            1,
+            1,
+            image::ColorType::Rgba8,
+        )
+        .unwrap();
+        let folder = write_graph(&dir, &texture);
+        let material = load_material(&folder.to_string_lossy()).expect("the graph loads");
+        assert!(matches!(material, LoadedMaterial::Graph(_)));
+
+        let scene = full_scene(&ctx);
+        let id = AssetId::of(
+            helio_mats::asset::MATERIAL_ASSET_KIND,
+            "full-texture-table-test",
+        );
+        let error = material
+            .resolve(id, 1, Some(&scene), &SurfaceValues::default())
+            .expect_err("a full table cannot bind the graph's texture");
+        assert!(error.contains("wood_albedo.png"), "{error}");
+        assert!(
+            error.contains("the scene's texture table is full"),
+            "{error}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -16,12 +16,13 @@
 //
 // The drawer declares the material table's bindings under these names
 // (the WebGPU lowering, `apply_webgpu_material_bindings`, finds the texture
-// and sampler arrays by them, so keep their declarations out of comments):
+// array by its name, so keep its declaration out of comments):
 //   `materials`, an array of GpuMaterial (`helio_mats::MATERIALS`);
 //   `material_textures`, an array of MaterialTextureData
 //   (`MaterialTextureBindings::material_textures`);
-//   `scene_textures` and `scene_samplers`, binding arrays of N 2D textures
-//   and N samplers (`MaterialTextureBindings`).
+//   `scene_sampler`, the one sampler every texture is read through, then
+//   `scene_textures`, a binding array of N 2D textures, at the next binding
+//   (`MaterialBindingConfig::append_layout_entries`).
 
 // A material texture's slot in the table and its UV transform.
 struct MaterialTextureSlot {
@@ -92,7 +93,7 @@ fn sample_texture(slot: MaterialTextureSlot, base_uv: vec2<f32>, fallback: vec4<
         return fallback;
     }
     let uv = select_uv(slot, base_uv);
-    return textureSample(scene_textures[slot.texture_index], scene_samplers[slot.texture_index], uv);
+    return textureSample(scene_textures[slot.texture_index], scene_sampler, uv);
 }
 
 // Basic SceneDB materials carry texture-store indices directly. An explicit

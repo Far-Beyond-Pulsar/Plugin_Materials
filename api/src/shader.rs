@@ -56,7 +56,7 @@ pub const MATERIAL_ROW_SNIPPET: helio_core::shader::ShaderSnippet =
 /// `material_at` (a row, or the stand-in), `material_texture_data`,
 /// `sample_texture` and `default_pbr_surface`. The reader declares the
 /// table's bindings as `materials`, `material_textures`, `scene_textures`
-/// and `scene_samplers` (see the file's header).
+/// and `scene_sampler` (see the file's header).
 pub const MATERIAL_SURFACE_SNIPPET: helio_core::shader::ShaderSnippet = helio_core::wgsl_snippet!(
     "//!use material_surface",
     "../shaders/material_surface.wgsl"
@@ -72,66 +72,76 @@ pub const MATERIAL_SNIPPETS: [helio_core::shader::ShaderSnippet; 4] = [
     MATERIAL_SURFACE_SNIPPET,
 ];
 
-/// Replace native material binding arrays with baseline-WebGPU bindings.
+/// Replace the texture table's binding array with one binding per texture.
 ///
-/// Browser WebGPU does not expose wgpu's `binding_array` WGSL extension. The
-/// fixed bindings and switch preserve every material texture slot without
-/// requiring a native-only feature. The native-only extension directive is
-/// removed together with the binding-array declarations.
-pub fn apply_webgpu_material_bindings(src: &str, max_textures: usize) -> String {
-    let mut declarations = String::new();
-    for index in 0..max_textures {
-        declarations.push_str(&format!(
-            "@group(1) @binding({}) var scene_texture_{index}: texture_2d<f32>;\n",
-            2 + index,
-        ));
-    }
-    for index in 0..max_textures {
-        declarations.push_str(&format!(
-            "@group(1) @binding({}) var scene_sampler_{index}: sampler;\n",
-            2 + max_textures + index,
-        ));
-    }
-
-    let mut source = String::with_capacity(src.len() + declarations.len());
+/// Finds the `scene_textures` binding array's declaration and puts
+/// `scene_texture_{i}` at its group and binding `+ i` in its place
+/// ([`crate::MaterialBindingConfig::append_layout_entries`]' expanded
+/// layout), and drops the native-only extension directive. The one
+/// `scene_sampler` binding is the same in both layouts, so it stays.
+fn expand_texture_table(src: &str, max_textures: usize) -> String {
+    let mut source = String::with_capacity(src.len() + 64 * max_textures);
     for line in src.lines() {
         if line.trim() == "enable wgpu_binding_array;" {
-            // The rewritten shader no longer uses this native-only extension.
+            // wgpu-only extension; baseline WebGPU rejects the directive.
         } else if line.contains("scene_textures:") && line.contains("binding_array<texture_2d") {
-            source.push_str(&declarations);
-        } else if line.contains("scene_samplers:") && line.contains("binding_array<sampler") {
-            // Both binding tables were emitted in place of scene_textures.
+            let attribute = |name: &str| -> u32 {
+                let open = format!("@{name}(");
+                line.find(&open)
+                    .and_then(|start| {
+                        let rest = &line[start + open.len()..];
+                        rest[..rest.find(')')?].trim().parse().ok()
+                    })
+                    .unwrap_or_else(|| panic!("scene_textures declaration without @{name}: {line}"))
+            };
+            let (group, first) = (attribute("group"), attribute("binding"));
+            for index in 0..max_textures {
+                source.push_str(&format!(
+                    "@group({group}) @binding({}) var scene_texture_{index}: texture_2d<f32>;\n",
+                    first + index as u32,
+                ));
+            }
         } else {
             source.push_str(line);
             source.push('\n');
         }
     }
+    source
+}
 
-    let mut sample_switch = String::from("switch slot.texture_index {\n");
+/// A `switch` over the expanded table returning
+/// `textureSampleLevel(scene_texture_{i}, scene_sampler, uv, 0.0)` for
+/// `selector`, and `fallback` past it.
+fn expanded_sample_switch(selector: &str, max_textures: usize, fallback: &str) -> String {
+    let mut switch = format!("switch {selector} {{\n");
     for index in 0..max_textures {
-        sample_switch.push_str(&format!(
-            "        case {index}u: {{ return textureSampleLevel(scene_texture_{index}, scene_sampler_{index}, uv, 0.0); }}\n",
+        switch.push_str(&format!(
+            "        case {index}u: {{ return textureSampleLevel(scene_texture_{index}, scene_sampler, uv, 0.0); }}\n",
         ));
     }
-    sample_switch.push_str("        default: { return fallback; }\n    }");
+    switch.push_str(&format!("        default: {{ return {fallback}; }}\n    }}"));
+    switch
+}
 
-    let mut source = source.replace(
-        "return textureSample(scene_textures[slot.texture_index], scene_samplers[slot.texture_index], uv);",
-        &sample_switch,
+/// Replace native material binding arrays with baseline-WebGPU bindings.
+///
+/// Browser WebGPU does not expose wgpu's `binding_array` WGSL extension. The
+/// fixed bindings and switch preserve every material texture slot without
+/// requiring a native-only feature. The native-only extension directive is
+/// removed together with the binding-array declaration.
+pub fn apply_webgpu_material_bindings(src: &str, max_textures: usize) -> String {
+    let mut source = expand_texture_table(src, max_textures).replace(
+        "return textureSample(scene_textures[slot.texture_index], scene_sampler, uv);",
+        &expanded_sample_switch("slot.texture_index", max_textures, "fallback"),
     );
     // Blueprint graphs bind TextureSrc assets to fixed SceneDB texture slots
     // at compile time. Lower those constant indices to the same individual
     // bindings used by the WebGPU fallback path.
     for index in 0..max_textures {
-        source = source
-            .replace(
-                &format!("scene_textures[{index}u]"),
-                &format!("scene_texture_{index}"),
-            )
-            .replace(
-                &format!("scene_samplers[{index}u]"),
-                &format!("scene_sampler_{index}"),
-            );
+        source = source.replace(
+            &format!("scene_textures[{index}u]"),
+            &format!("scene_texture_{index}"),
+        );
     }
     lower_graph_texture_samples(&source, max_textures)
 }
@@ -178,22 +188,19 @@ fn lower_graph_texture_samples(source: &str, max_textures: usize) -> String {
             .map(|texture| strip_outer_parentheses(texture))
             .and_then(|texture| texture.strip_prefix("scene_textures[material."))
             .and_then(|field| field.strip_suffix(']'));
-        let sampler_field = parts
+        let reads_scene_sampler = parts
             .get(1)
-            .map(|sampler| strip_outer_parentheses(sampler))
-            .and_then(|sampler| sampler.strip_prefix("scene_samplers[material."))
-            .and_then(|field| field.strip_suffix(']'));
+            .is_some_and(|sampler| strip_outer_parentheses(sampler) == "scene_sampler");
         let variant = match name {
             "textureSample(" if parts.len() == 3 => Some(("pulsar_graph_sample", 1)),
             "textureSampleLevel(" if parts.len() == 4 => Some(("pulsar_graph_sample_level", 2)),
             "textureSampleGrad(" if parts.len() == 5 => Some(("pulsar_graph_sample_grad", 3)),
             _ => None,
         };
-        if let (Some(texture_field), Some(sampler_field), Some((helper, helper_index))) =
-            (texture_field, sampler_field, variant)
+        if let (Some(texture_field), true, Some((helper, helper_index))) =
+            (texture_field, reads_scene_sampler, variant)
         {
-            if texture_field == sampler_field
-                && GRAPH_FIELDS.contains(&texture_field)
+            if GRAPH_FIELDS.contains(&texture_field)
                 && max_textures > 0
             {
                 rewritten.push_str(&source[cursor..start]);
@@ -319,58 +326,24 @@ fn graph_sample_helper(kind: usize, max_textures: usize) -> String {
             "        case {index}u: {{ return {}; }}\n",
             sample
                 .replace("TEXTURE", &format!("scene_texture_{index}"))
-                .replace("SAMPLER", &format!("scene_sampler_{index}"))
+                .replace("SAMPLER", "scene_sampler")
         ));
     }
     helper.push_str("        default: { return vec4<f32>(1.0); }\n    }\n}\n");
     helper
 }
 
-/// Replace the decal pass's scene binding arrays with baseline-WebGPU bindings.
+/// Replace a kind's scene texture table with baseline-WebGPU bindings, for
+/// a reader that samples it by a plain `u32` index.
 ///
-/// Same idea as [`apply_webgpu_material_bindings`], but for the decal collect
-/// compute shader: it indexes the table with a plain `u32` rather than a
-/// material slot, samples with `textureSampleLevel` (compute has no implicit
-/// derivatives), and owns group 1 outright so its tables start at binding 0.
+/// Same idea as [`apply_webgpu_material_bindings`], for readers (the decal
+/// collect compute shader, sprites) that index the table with a plain
+/// `texture_index` rather than a material slot and sample with
+/// `textureSampleLevel` (compute has no implicit derivatives).
 pub fn apply_webgpu_decal_bindings(src: &str, max_textures: usize) -> String {
-    let mut declarations = String::new();
-    for index in 0..max_textures {
-        declarations.push_str(&format!(
-            "@group(1) @binding({index}) var scene_texture_{index}: texture_2d<f32>;\n",
-        ));
-    }
-    for index in 0..max_textures {
-        declarations.push_str(&format!(
-            "@group(1) @binding({}) var scene_sampler_{index}: sampler;\n",
-            max_textures + index,
-        ));
-    }
-
-    let mut source = String::with_capacity(src.len() + declarations.len());
-    for line in src.lines() {
-        if line.contains("scene_textures:") && line.contains("binding_array<texture_2d") {
-            source.push_str(&declarations);
-        } else if line.contains("scene_samplers:") && line.contains("binding_array<sampler") {
-            // Both binding tables were emitted in place of scene_textures.
-        } else if line.trim() == "enable wgpu_binding_array;" {
-            // wgpu-only extension; baseline WebGPU rejects the directive.
-        } else {
-            source.push_str(line);
-            source.push('\n');
-        }
-    }
-
-    let mut sample_switch = String::from("switch texture_index {\n");
-    for index in 0..max_textures {
-        sample_switch.push_str(&format!(
-            "        case {index}u: {{ return textureSampleLevel(scene_texture_{index}, scene_sampler_{index}, uv, 0.0); }}\n",
-        ));
-    }
-    sample_switch.push_str("        default: { return vec4<f32>(1.0); }\n    }");
-
-    source.replace(
-        "return textureSampleLevel(scene_textures[texture_index], scene_samplers[texture_index], uv, 0.0);",
-        &sample_switch,
+    expand_texture_table(src, max_textures).replace(
+        "return textureSampleLevel(scene_textures[texture_index], scene_sampler, uv, 0.0);",
+        &expanded_sample_switch("texture_index", max_textures, "vec4<f32>(1.0)"),
     )
 }
 
@@ -382,30 +355,35 @@ mod tests {
     fn expands_material_binding_arrays() {
         let source = r#"
 enable wgpu_binding_array;
-@group(1) @binding(2) var scene_textures: binding_array<texture_2d<f32>, 2>;
-@group(1) @binding(3) var scene_samplers: binding_array<sampler, 2>;
+@group(1) @binding(2) var scene_sampler: sampler;
+@group(1) @binding(3) var scene_textures: binding_array<texture_2d<f32>, 2>;
 fn sample_texture(slot: MaterialTextureSlot, uv: vec2<f32>, fallback: vec4<f32>) -> vec4<f32> {
-    return textureSample(scene_textures[slot.texture_index], scene_samplers[slot.texture_index], uv);
+    return textureSample(scene_textures[slot.texture_index], scene_sampler, uv);
 }
 "#;
         let fixed = apply_webgpu_material_bindings(source, 2);
 
         assert!(!fixed.contains("binding_array"));
-        assert!(fixed.contains("@binding(2) var scene_texture_0"));
-        assert!(fixed.contains("@binding(5) var scene_sampler_1"));
-        assert!(fixed.contains("case 1u:"));
-        assert!(fixed.contains("textureSampleLevel"));
+        assert!(!fixed.contains("enable wgpu_binding_array"));
+        // The one sampler stays where it is; the textures follow it.
+        assert!(fixed.contains("@group(1) @binding(2) var scene_sampler: sampler;"));
+        assert!(fixed.contains("@group(1) @binding(3) var scene_texture_0: texture_2d<f32>;"));
+        assert!(fixed.contains("@group(1) @binding(4) var scene_texture_1: texture_2d<f32>;"));
+        assert!(fixed.contains(
+            "case 1u: { return textureSampleLevel(scene_texture_1, scene_sampler, uv, 0.0); }"
+        ));
+        assert!(fixed.contains("default: { return fallback; }"));
     }
 
     #[test]
     fn lowers_graph_material_indices_for_expanded_bindings() {
         let source = r#"
-@group(1) @binding(2) var scene_textures: binding_array<texture_2d<f32>, 2>;
-@group(1) @binding(3) var scene_samplers: binding_array<sampler, 2>;
+@group(1) @binding(2) var scene_sampler: sampler;
+@group(1) @binding(3) var scene_textures: binding_array<texture_2d<f32>, 2>;
 fn graph(material: GpuMaterial, uv: vec2<f32>) -> vec4<f32> {
-    let a = textureSample((scene_textures[material.tex_base_color]), scene_samplers[material.tex_base_color], uv);
-    let b = textureSampleLevel(scene_textures[material.tex_normal], scene_samplers[material.tex_normal], uv, 2.0);
-    let c = textureSampleGrad(scene_textures[material.tex_roughness], scene_samplers[material.tex_roughness], uv, vec2<f32>(1.0), vec2<f32>(1.0));
+    let a = textureSample((scene_textures[material.tex_base_color]), scene_sampler, uv);
+    let b = textureSampleLevel(scene_textures[material.tex_normal], scene_sampler, uv, 2.0);
+    let c = textureSampleGrad(scene_textures[material.tex_roughness], scene_sampler, uv, vec2<f32>(1.0), vec2<f32>(1.0));
     return a + b + c;
 }
 "#;
@@ -413,10 +391,9 @@ fn graph(material: GpuMaterial, uv: vec2<f32>) -> vec4<f32> {
 
         assert!(!fixed.contains("binding_array"));
         assert!(!fixed.contains("scene_textures[material."));
-        assert!(!fixed.contains("scene_samplers[material."));
         assert!(fixed.contains("pulsar_graph_sample(material.tex_base_color, uv)"));
         assert!(fixed.contains("let dx = dpdx(uv);"));
-        assert!(fixed.contains("textureSampleGrad(scene_texture_0, scene_sampler_0, uv, dx, dy)"));
+        assert!(fixed.contains("textureSampleGrad(scene_texture_0, scene_sampler, uv, dx, dy)"));
         assert!(fixed.contains("pulsar_graph_sample_level(material.tex_normal, uv, 2.0)"));
         assert!(fixed.contains(
             "pulsar_graph_sample_grad(material.tex_roughness, uv, vec2<f32>(1.0), vec2<f32>(1.0))"
@@ -427,25 +404,25 @@ fn graph(material: GpuMaterial, uv: vec2<f32>) -> vec4<f32> {
     fn expands_decal_binding_arrays() {
         let source = r#"
 enable wgpu_binding_array;
-@group(1) @binding(0) var scene_textures: binding_array<texture_2d<f32>, 256>;
-@group(1) @binding(1) var scene_samplers: binding_array<sampler, 256>;
+@group(1) @binding(0) var scene_sampler: sampler;
+@group(1) @binding(1) var scene_textures: binding_array<texture_2d<f32>, 256>;
 fn sample_decal_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
-    return textureSampleLevel(scene_textures[texture_index], scene_samplers[texture_index], uv, 0.0);
+    return textureSampleLevel(scene_textures[texture_index], scene_sampler, uv, 0.0);
 }
 "#;
         let fixed = apply_webgpu_decal_bindings(source, 2);
 
-        // The extension directive and both tables must be gone — baseline
-        // WebGPU rejects all three.
+        // The extension directive and the binding array must be gone —
+        // baseline WebGPU rejects both.
         assert!(!fixed.contains("binding_array"));
         assert!(!fixed.contains("enable wgpu_binding_array"));
-        assert!(fixed.contains("@group(1) @binding(0) var scene_texture_0"));
-        assert!(fixed.contains("@group(1) @binding(1) var scene_texture_1"));
-        // Samplers follow the textures: base = max_textures.
-        assert!(fixed.contains("@group(1) @binding(2) var scene_sampler_0"));
-        assert!(fixed.contains("@group(1) @binding(3) var scene_sampler_1"));
+        // The one sampler stays; the textures follow it.
+        assert!(fixed.contains("@group(1) @binding(0) var scene_sampler: sampler;"));
+        assert!(fixed.contains("@group(1) @binding(1) var scene_texture_0"));
+        assert!(fixed.contains("@group(1) @binding(2) var scene_texture_1"));
+        assert!(!fixed.contains("scene_sampler_"));
         assert!(fixed.contains(
-            "case 1u: { return textureSampleLevel(scene_texture_1, scene_sampler_1, uv, 0.0); }"
+            "case 1u: { return textureSampleLevel(scene_texture_1, scene_sampler, uv, 0.0); }"
         ));
         assert!(fixed.contains("default: { return vec4<f32>(1.0); }"));
     }

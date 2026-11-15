@@ -5,9 +5,9 @@
 
 use bytemuck::{Pod, Zeroable};
 
-/// Most material textures a table holds on this platform: the device's
-/// texture-table cap ([`helio_core::TEXTURE_TABLE_LIMIT`], which a host
-/// asks the device for).
+/// Most material textures a table holds on this platform, whatever the
+/// device offers ([`helio_core::TEXTURE_TABLE_LIMIT`]); a device's own table
+/// is [`MaterialBindingConfig::max_textures`], often smaller.
 pub const MAX_MATERIAL_TEXTURES: usize = helio_core::TEXTURE_TABLE_LIMIT;
 
 /// Native features the descriptor-indexed material table needs: the
@@ -56,6 +56,20 @@ impl MaterialBindingConfig {
         self.mode == MaterialBindingMode::BindingArray
     }
 
+    /// Bindings the table takes from `first_binding`: the sampler, then the
+    /// textures (one binding array, or one binding per texture).
+    pub fn binding_count(self) -> u32 {
+        match self.mode {
+            MaterialBindingMode::BindingArray => 2,
+            MaterialBindingMode::Expanded => 1 + self.max_textures as u32,
+        }
+    }
+
+    /// The table's layout from `first_binding`: the material sampler (one,
+    /// whatever the table's size: samplers are filter states, not
+    /// per-texture resources, so the table never counts against a device's
+    /// sampler limits), then the textures, one binding array at
+    /// `first_binding + 1` or one binding each from there.
     pub fn append_layout_entries(
         self,
         entries: &mut Vec<wgpu::BindGroupLayoutEntry>,
@@ -72,65 +86,52 @@ impl MaterialBindingConfig {
             },
             count,
         };
-        let sampler_entry = |binding, count| wgpu::BindGroupLayoutEntry {
-            binding,
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: first_binding,
             visibility,
             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            count,
-        };
-
+            count: None,
+        });
         match self.mode {
             MaterialBindingMode::BindingArray => {
                 let count = std::num::NonZeroU32::new(self.max_textures as u32)
                     .expect("material texture table is non-empty");
-                entries.push(texture_entry(first_binding, Some(count)));
-                entries.push(sampler_entry(first_binding + 1, Some(count)));
+                entries.push(texture_entry(first_binding + 1, Some(count)));
             }
             MaterialBindingMode::Expanded => {
                 for index in 0..self.max_textures as u32 {
-                    entries.push(texture_entry(first_binding + index, None));
-                }
-                for index in 0..self.max_textures as u32 {
-                    entries.push(sampler_entry(
-                        first_binding + self.max_textures as u32 + index,
-                        None,
-                    ));
+                    entries.push(texture_entry(first_binding + 1 + index, None));
                 }
             }
         }
     }
 
+    /// The table's bind group entries, in [`Self::append_layout_entries`]'
+    /// layout.
     pub fn append_bind_group_entries<'a>(
         self,
         entries: &mut Vec<wgpu::BindGroupEntry<'a>>,
         first_binding: u32,
         texture_views: &'a [&'a wgpu::TextureView],
-        samplers: &'a [&'a wgpu::Sampler],
+        sampler: &'a wgpu::Sampler,
     ) {
         assert_eq!(texture_views.len(), self.max_textures);
-        assert_eq!(samplers.len(), self.max_textures);
+        entries.push(wgpu::BindGroupEntry {
+            binding: first_binding,
+            resource: wgpu::BindingResource::Sampler(sampler),
+        });
         match self.mode {
             MaterialBindingMode::BindingArray => {
                 entries.push(wgpu::BindGroupEntry {
-                    binding: first_binding,
-                    resource: wgpu::BindingResource::TextureViewArray(texture_views),
-                });
-                entries.push(wgpu::BindGroupEntry {
                     binding: first_binding + 1,
-                    resource: wgpu::BindingResource::SamplerArray(samplers),
+                    resource: wgpu::BindingResource::TextureViewArray(texture_views),
                 });
             }
             MaterialBindingMode::Expanded => {
                 for (index, view) in texture_views.iter().enumerate() {
                     entries.push(wgpu::BindGroupEntry {
-                        binding: first_binding + index as u32,
+                        binding: first_binding + 1 + index as u32,
                         resource: wgpu::BindingResource::TextureView(view),
-                    });
-                }
-                for (index, sampler) in samplers.iter().enumerate() {
-                    entries.push(wgpu::BindGroupEntry {
-                        binding: first_binding + self.max_textures as u32 + index as u32,
-                        resource: wgpu::BindingResource::Sampler(sampler),
                     });
                 }
             }
@@ -240,7 +241,8 @@ impl GpuMaterial {
 pub struct MaterialTextureBindings<'a> {
     pub material_textures: &'a wgpu::Buffer,
     pub texture_views: &'a [&'a wgpu::TextureView],
-    pub samplers: &'a [&'a wgpu::Sampler],
+    /// The one sampler every texture is read through (`scene_sampler`).
+    pub sampler: &'a wgpu::Sampler,
     pub version: u64,
 }
 
@@ -279,26 +281,58 @@ mod material_binding_tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn complete_binding_array_feature_pair_selects_descriptor_indexing() {
-        let config = MaterialBindingConfig::from_capabilities(
-            BINDLESS_MATERIAL_FEATURES,
-            limits(256, 256, 8),
-        );
+        // A D3D12 tier-2 device: a million descriptors, 2048 samplers in its
+        // shader-visible heap, which the table's one sampler does not count
+        // against.
+        let limits = wgpu::Limits {
+            max_binding_array_elements_per_shader_stage: 1_000_000,
+            max_binding_array_sampler_elements_per_shader_stage: 2048,
+            ..limits(16, 16, 8)
+        };
+        let config = MaterialBindingConfig::from_capabilities(BINDLESS_MATERIAL_FEATURES, limits);
         assert_eq!(config.mode, MaterialBindingMode::BindingArray);
-        assert_eq!(config.max_textures, MAX_MATERIAL_TEXTURES.min(256));
+        // The table follows the binding-array limits, not the per-stage
+        // ones: thousands of textures on a desktop GPU.
+        assert_eq!(config.max_textures, MAX_MATERIAL_TEXTURES);
+
+        let mut entries = Vec::new();
+        config.append_layout_entries(&mut entries, 2, wgpu::ShaderStages::FRAGMENT);
+        assert_eq!(entries.len() as u32, config.binding_count());
+        // One sampler at the first binding, then one texture array.
+        assert_eq!(entries[0].binding, 2);
+        assert!(matches!(entries[0].ty, wgpu::BindingType::Sampler(_)));
+        assert_eq!(entries[0].count, None);
+        assert_eq!(entries[1].binding, 3);
+        assert!(matches!(entries[1].ty, wgpu::BindingType::Texture { .. }));
+        assert_eq!(
+            entries[1].count.map(|count| count.get() as usize),
+            Some(config.max_textures)
+        );
     }
 
     #[test]
-    fn expanded_binding_count_is_bounded_by_texture_sampler_pairs() {
+    fn expanded_binding_count_is_bounded_by_the_bind_group() {
+        // 22 bindings: two of the reader's, the sampler and 19 textures; the
+        // device's two samplers do not bound it.
         let config =
-            MaterialBindingConfig::from_capabilities(wgpu::Features::empty(), limits(64, 64, 22));
+            MaterialBindingConfig::from_capabilities(wgpu::Features::empty(), limits(64, 2, 22));
         assert_eq!(config.mode, MaterialBindingMode::Expanded);
-        assert_eq!(config.max_textures, 10);
+        assert_eq!(config.max_textures, 19);
 
         let mut entries = Vec::new();
         config.append_layout_entries(&mut entries, 2, wgpu::ShaderStages::FRAGMENT);
         assert_eq!(entries.len(), 20);
+        assert_eq!(entries.len() as u32, config.binding_count());
         assert_eq!(entries.first().map(|entry| entry.binding), Some(2));
+        assert!(matches!(entries[0].ty, wgpu::BindingType::Sampler(_)));
         assert_eq!(entries.last().map(|entry| entry.binding), Some(21));
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| matches!(entry.ty, wgpu::BindingType::Sampler(_)))
+                .count(),
+            1
+        );
         assert!(entries.iter().all(|entry| entry.count.is_none()));
     }
 }

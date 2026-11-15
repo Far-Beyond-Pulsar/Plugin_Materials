@@ -85,15 +85,10 @@ pub fn compile_graph(
     // The standalone viewer has no scene material row, so specialize the
     // stable material fields to its own densely bound texture table.
     for (ordinal, field) in crate::graph::GRAPH_TEXTURE_FIELDS.iter().enumerate() {
-        snippet = snippet
-            .replace(
-                &format!("scene_textures[material.{field}]"),
-                &format!("scene_textures[{ordinal}u]"),
-            )
-            .replace(
-                &format!("scene_samplers[material.{field}]"),
-                &format!("scene_samplers[{ordinal}u]"),
-            );
+        snippet = snippet.replace(
+            &format!("scene_textures[material.{field}]"),
+            &format!("scene_textures[{ordinal}u]"),
+        );
     }
     Ok(GraphPreview { snippet, textures })
 }

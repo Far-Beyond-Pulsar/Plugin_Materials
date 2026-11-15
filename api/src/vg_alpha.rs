@@ -17,7 +17,7 @@
 //! |---|---|
 //! | `first` | `vga_materials`: `GpuMaterial` rows as `array<u32>` (24 words) |
 //! | `first + 1` | `vga_material_textures`: `MaterialTextureData` rows (88 words) |
-//! | `first + 2 ..` | the texture table (`MaterialBindingConfig::append_layout_entries`) |
+//! | `first + 2 ..` | the texture table (`MaterialBindingConfig::append_layout_entries`): `vga_sampler`, then the textures |
 
 use crate::{
     material::{MaterialBindingConfig, MaterialBindingMode, MaterialTextureBindings},
@@ -63,21 +63,24 @@ pub fn bindings_wgsl(binding: MaterialBindingConfig, group: u32, first: u32) -> 
          @group({group}) @binding({}) var<storage, read> vga_material_textures: array<u32>;",
         first + 1
     );
+    let _ = writeln!(
+        s,
+        "@group({group}) @binding({}) var vga_sampler: sampler;",
+        first + 2
+    );
     match binding.mode {
         MaterialBindingMode::BindingArray => {
             let _ = writeln!(
                 s,
                 "@group({group}) @binding({}) var vga_textures: binding_array<texture_2d<f32>, {n}>;\n\
-                 @group({group}) @binding({}) var vga_samplers: binding_array<sampler, {n}>;\n\
                  fn vga_sample_grad(i: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {{\n    \
                      let k = min(i, {}u);\n    \
-                     return textureSampleGrad(vga_textures[k], vga_samplers[k], uv, dx, dy);\n}}\n\
+                     return textureSampleGrad(vga_textures[k], vga_sampler, uv, dx, dy);\n}}\n\
                  fn vga_sample_level(i: u32, uv: vec2<f32>, lod: f32) -> vec4<f32> {{\n    \
                      let k = min(i, {}u);\n    \
-                     return textureSampleLevel(vga_textures[k], vga_samplers[k], uv, lod);\n}}\n\
+                     return textureSampleLevel(vga_textures[k], vga_sampler, uv, lod);\n}}\n\
                  fn vga_tex_size(i: u32) -> vec2<f32> {{\n    \
                      return vec2<f32>(textureDimensions(vga_textures[min(i, {}u)], 0));\n}}",
-                first + 2,
                 first + 3,
                 n - 1,
                 n - 1,
@@ -88,17 +91,15 @@ pub fn bindings_wgsl(binding: MaterialBindingConfig, group: u32, first: u32) -> 
             for i in 0..n {
                 let _ = writeln!(
                     s,
-                    "@group({group}) @binding({}) var vga_texture_{i}: texture_2d<f32>;\n\
-                     @group({group}) @binding({}) var vga_sampler_{i}: sampler;",
-                    first + 2 + i as u32,
-                    first + 2 + (n + i) as u32
+                    "@group({group}) @binding({}) var vga_texture_{i}: texture_2d<f32>;",
+                    first + 3 + i as u32,
                 );
             }
             let _ = writeln!(s, "fn vga_sample_grad(i: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> vec4<f32> {{\n    switch i {{");
             for i in 0..n {
                 let _ = writeln!(
                     s,
-                    "        case {i}u: {{ return textureSampleGrad(vga_texture_{i}, vga_sampler_{i}, uv, dx, dy); }}"
+                    "        case {i}u: {{ return textureSampleGrad(vga_texture_{i}, vga_sampler, uv, dx, dy); }}"
                 );
             }
             let _ = writeln!(
@@ -109,7 +110,7 @@ pub fn bindings_wgsl(binding: MaterialBindingConfig, group: u32, first: u32) -> 
             for i in 0..n {
                 let _ = writeln!(
                     s,
-                    "        case {i}u: {{ return textureSampleLevel(vga_texture_{i}, vga_sampler_{i}, uv, lod); }}"
+                    "        case {i}u: {{ return textureSampleLevel(vga_texture_{i}, vga_sampler, uv, lod); }}"
                 );
             }
             let _ = writeln!(
@@ -183,7 +184,7 @@ pub fn bind_entries<'a>(
         &mut entries,
         first + 2,
         textures.texture_views,
-        textures.samplers,
+        textures.sampler,
     );
     entries
 }

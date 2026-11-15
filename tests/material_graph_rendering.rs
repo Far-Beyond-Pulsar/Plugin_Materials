@@ -128,7 +128,8 @@ fn connected_outputs_override_defaults() {
         graph_material_assignments(&graph, 1)
     );
     assert!(source.contains("scene_textures[material.tex_base_color]"));
-    assert!(source.contains("scene_samplers[material.tex_base_color]"));
+    assert!(source.contains(", scene_sampler,"));
+    assert!(!source.contains("scene_samplers"));
     assert!(!source.contains("scene_textures[1u]"));
     assert!(!source.contains("texture_sampler"));
     assert!(!source.contains("test.png"));
@@ -137,7 +138,7 @@ fn connected_outputs_override_defaults() {
 }
 
 #[test]
-fn every_texture_sampling_variant_binds_its_own_sampler() {
+fn every_texture_sampling_variant_reads_the_material_sampler() {
     for kind in [
         "sample_texture",
         "sample_texture_level",
@@ -151,7 +152,7 @@ fn every_texture_sampling_variant_binds_its_own_sampler() {
         graph.nodes.insert("texture".into(), texture);
         let source = adapted(&graph, 1);
         assert!(
-            source.contains("scene_samplers[material.tex_base_color]"),
+            source.contains(", scene_sampler,"),
             "{kind}: {source}"
         );
         assert!(!source.contains("texture_sampler"), "{kind}: {source}");
@@ -229,8 +230,8 @@ enable wgpu_binding_array;
 
 @group(1) @binding(0) var<storage, read> materials: array<GpuMaterial>;
 @group(1) @binding(1) var<storage, read> material_textures: array<MaterialTextureData>;
-@group(1) @binding(2) var scene_textures: binding_array<texture_2d<f32>, 256>;
-@group(1) @binding(3) var scene_samplers: binding_array<sampler, 256>;
+@group(1) @binding(2) var scene_sampler: sampler;
+@group(1) @binding(3) var scene_textures: binding_array<texture_2d<f32>, 256>;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -451,38 +452,8 @@ impl Gpu {
         }
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
         let view_refs = [&views[0], &views[1]];
-        let sampler_refs = [&sampler, &sampler];
-        let entries = if bindless {
-            vec![
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureViewArray(&view_refs),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::SamplerArray(&sampler_refs),
-                },
-            ]
-        } else {
-            vec![
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&views[0]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&views[1]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ]
-        };
+        let mut entries = Vec::new();
+        binding_config.append_bind_group_entries(&mut entries, 2, &view_refs, &sampler);
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &pipeline.get_bind_group_layout(1),

@@ -2,7 +2,8 @@
 //! drawer binds when no materials plugin publishes one ([`MaterialStandIn`]).
 //!
 //! A table holds one view per slot (a white texture where a slot is empty),
-//! the material sampler and the per-material texture metadata; its
+//! the one material sampler every slot is read through and the per-material
+//! texture metadata; its
 //! [`MaterialTextureBindings`] are what every drawer binds
 //! (`MaterialBindingConfig::append_bind_group_entries`). The materials'
 //! feature (`helio-pass-materials`) keeps one in step with the scene's
@@ -17,10 +18,11 @@ pub const MATERIAL_TEXTURE_DATA_WORDS: usize = 88;
 /// A material texture table: one view per slot, its sampler and metadata.
 pub struct MaterialTextureTable {
     _fallback_texture: wgpu::Texture,
-    // Boxed (as the slots' views are, in `slots`' heap buffer): their
-    // addresses never change when the table moves.
+    // Boxed (as the slots' views are, in `slots`' heap buffer): its
+    // address never changes when the table moves.
     fallback_view: Box<wgpu::TextureView>,
-    sampler: Box<wgpu::Sampler>,
+    /// The one sampler every slot is read through (`scene_sampler`).
+    sampler: wgpu::Sampler,
     /// The `MaterialTextureData` sentinel (`params.w = -1`): shaders derive
     /// a material's texture slots from its row (`tex_*`, identity UVs).
     metadata: wgpu::Buffer,
@@ -29,7 +31,6 @@ pub struct MaterialTextureTable {
     slots: Vec<Option<(wgpu::Texture, wgpu::TextureView)>>,
     /// The table's views (a slot's or the fallback), pointing into `self`.
     view_refs: Vec<&'static wgpu::TextureView>,
-    sampler_refs: Vec<&'static wgpu::Sampler>,
     version: u64,
 }
 
@@ -64,14 +65,12 @@ impl MaterialTextureTable {
         );
         let fallback_view =
             Box::new(fallback_texture.create_view(&wgpu::TextureViewDescriptor::default()));
-        let sampler = Box::new(
-            device.create_sampler(&sampler.map(|s| s.0.clone()).unwrap_or(
-                wgpu::SamplerDescriptor {
-                    label: Some("Default Material Sampler"),
-                    ..Default::default()
-                },
-            )),
-        );
+        let sampler = device.create_sampler(&sampler.map(|s| s.0.clone()).unwrap_or(
+            wgpu::SamplerDescriptor {
+                label: Some("Default Material Sampler"),
+                ..Default::default()
+            },
+        ));
         let mut sentinel = [0u32; MATERIAL_TEXTURE_DATA_WORDS];
         sentinel[MATERIAL_TEXTURE_DATA_WORDS - 1] = (-1.0f32).to_bits();
         let metadata = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -86,7 +85,6 @@ impl MaterialTextureTable {
             metadata,
             slots: vec![None; binding.max_textures],
             view_refs: Vec::with_capacity(binding.max_textures),
-            sampler_refs: Vec::with_capacity(binding.max_textures),
             version: 0,
         };
         table.refresh_refs();
@@ -145,15 +143,15 @@ impl MaterialTextureTable {
         MaterialTextureBindings {
             material_textures: &self.metadata,
             texture_views: &self.view_refs,
-            samplers: &self.sampler_refs,
+            sampler: &self.sampler,
             version: self.version,
         }
     }
 
-    /// Points `view_refs`/`sampler_refs` at this table's current views.
+    /// Points `view_refs` at this table's current views.
     fn refresh_refs(&mut self) {
-        // SAFETY: the views and the sampler are owned by `self` on the heap
-        // (the boxes, `slots`' buffer), so they stay where they are when the
+        // SAFETY: the views are owned by `self` on the heap (the box,
+        // `slots`' buffer), so they stay where they are when the
         // table moves, and live as long as it does; `slots` is never resized
         // and an entry replaced in `set` calls this again. The `'static`
         // references never leave `self` but as borrows of it (`bindings`).
@@ -166,9 +164,6 @@ impl MaterialTextureTable {
                 None => fallback,
             });
         }
-        let sampler: &'static wgpu::Sampler = unsafe { &*(&*self.sampler as *const wgpu::Sampler) };
-        self.sampler_refs.clear();
-        self.sampler_refs.resize(self.slots.len(), sampler);
     }
 }
 

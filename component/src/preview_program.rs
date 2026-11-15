@@ -31,8 +31,8 @@ struct ViewerClock {
 
 @group(1) @binding(0) var<storage, read> materials: array<GpuMaterial>;
 @group(1) @binding(1) var<storage, read> material_textures: array<MaterialTextureData>;
-@group(1) @binding(2) var scene_textures: binding_array<texture_2d<f32>, 256>;
-@group(1) @binding(3) var scene_samplers: binding_array<sampler, 256>;
+@group(1) @binding(2) var scene_sampler: sampler;
+@group(1) @binding(3) var scene_textures: binding_array<texture_2d<f32>, 256>;
 
 struct ViewerUniforms {
     view_proj: mat4x4<f32>,
@@ -270,9 +270,8 @@ pub fn build(
         entries: &layout_entries,
     });
     let view_refs: Vec<&wgpu::TextureView> = views.iter().collect();
-    let sampler_refs: Vec<&wgpu::Sampler> = (0..slots).map(|_| &sampler).collect();
     let mut entries = Vec::new();
-    binding.append_bind_group_entries(&mut entries, 2, &view_refs, &sampler_refs);
+    binding.append_bind_group_entries(&mut entries, 2, &view_refs, &sampler);
     let textures = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("graph material textures"),
         layout: &textures_layout,

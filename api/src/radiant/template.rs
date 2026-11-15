@@ -60,10 +60,6 @@ impl RadiantTemplate {
             .replace(
                 "binding_array<texture_2d<f32>, 256>",
                 &format!("binding_array<texture_2d<f32>, {max_tex_str}>"),
-            )
-            .replace(
-                "binding_array<sampler, 256>",
-                &format!("binding_array<sampler, {max_tex_str}>"),
             );
 
         // wgpu's Naga requires `enable wgpu_binding_array;` for binding_array

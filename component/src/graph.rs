@@ -38,7 +38,61 @@ pub fn texture_assets(graph: &psgc::GraphDescription) -> Result<Vec<String>, Str
             .ok_or_else(|| format!("Texture sample '{}' has no texture asset selected", node.id))?;
         assets.insert(asset.to_string());
     }
-    Ok(assets.into_iter().collect())
+    let mut assets: Vec<String> = assets.into_iter().collect();
+    // A texture-alpha mask takes ordinal 0, the row's base colour slot: the
+    // depth and shadow passes cut out with it (`material_cut_out`).
+    if let GraphMask::TextureAlpha(mask) = opacity_mask(graph) {
+        if let Some(at) = assets.iter().position(|asset| *asset == mask) {
+            let mask = assets.remove(at);
+            assets.insert(0, mask);
+        }
+    }
+    Ok(assets)
+}
+
+/// What drives a graph's `opacity_mask` (its cut-out coverage), as the passes
+/// that cut out without running the graph see it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GraphMask {
+    /// Not connected: the material is not masked.
+    None,
+    /// The alpha of this texture sampled at the mesh UV: the material row
+    /// cuts out with it in every pass (`FLAG_ALPHA_TEST`, ordinal 0).
+    TextureAlpha(String),
+    /// Any other expression: only a pass running the graph could evaluate it.
+    Other,
+}
+
+/// How `graph`'s output drives `opacity_mask`.
+pub fn opacity_mask(graph: &psgc::GraphDescription) -> GraphMask {
+    let source_of = |node: &str, pin: &str| {
+        graph
+            .connections
+            .iter()
+            .find(|c| c.target_node == node && c.target_pin == pin)
+            .and_then(|c| graph.nodes.get(&c.source_node))
+    };
+    let Some(output) = graph.nodes.values().find(|n| n.node_type == "fragment_output") else {
+        return GraphMask::None;
+    };
+    let Some(mask) = source_of(&output.id, "opacity_mask") else {
+        return GraphMask::None;
+    };
+    let texture = (mask.node_type == "component_a")
+        .then(|| source_of(&mask.id, "vec"))
+        .flatten()
+        .filter(|sample| sample.node_type == "sample_texture")
+        // Sampled at the mesh UV: the pin unconnected or fed by the UV.
+        .filter(|sample| {
+            source_of(&sample.id, "uv").is_none_or(|uv| {
+                matches!(uv.node_type.as_str(), "frag_uv" | "texture_coordinate" | "vertex_uv")
+            })
+        })
+        .and_then(|sample| sample.properties.get("texture").and_then(serde_json::Value::as_str));
+    match texture {
+        Some(asset) if !asset.trim().is_empty() => GraphMask::TextureAlpha(asset.to_string()),
+        _ => GraphMask::Other,
+    }
 }
 
 /// The image file a graph's texture asset names: a texture reference
@@ -292,6 +346,9 @@ albedo = graph_surface.base_color;
 // Preserve the connected RGBA color's alpha. The separate opacity input
 // modulates coverage and defaults to 1 when it is not connected.
 alpha = clamp(graph_surface.base_color.a, 0.0, 1.0) * clamp(graph_surface.opacity, 0.0, 1.0);
+// A masked graph (`opacity_mask` connected, the row's FLAG_ALPHA_TEST) covers
+// by its mask, the value the depth and shadow passes cut out with.
+if (material.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u { alpha = clamp(graph_surface.opacity_mask, 0.0, 1.0); }
 albedo.a = alpha;
 roughness = clamp(graph_surface.roughness, 0.045, 1.0);
 metallic = clamp(graph_surface.metallic, 0.0, 1.0);
@@ -305,6 +362,8 @@ specular_f0 = clamp(mix(vec3<f32>(0.04), albedo.rgb, metallic), vec3<f32>(0.0), 
     ))
 }
 
+/// Reads every graph texture sample of the scene texture table through the
+/// table's one sampler (`scene_sampler`), in place of the sampler PSGC names.
 fn bind_graph_texture_samplers(source: &mut String) {
     for function in [
         "textureSample(",
@@ -323,21 +382,15 @@ fn bind_graph_texture_samplers(source: &mut String) {
                 .trim()
                 .trim_matches(['(', ')'])
                 .trim();
-            let Some(slot_text) = first_arg
-                .strip_prefix("scene_textures[")
-                .and_then(|value| value.strip_suffix(']'))
-            else {
+            if !first_arg.starts_with("scene_textures[") {
                 search_from = first_comma + 1;
                 continue;
-            };
+            }
             let Some(second_comma_rel) = source[first_comma + 1..].find(',') else {
                 break;
             };
             let second_comma = first_comma + 1 + second_comma_rel;
-            source.replace_range(
-                first_comma + 1..second_comma,
-                &format!(" scene_samplers[{slot_text}]"),
-            );
+            source.replace_range(first_comma + 1..second_comma, " scene_sampler");
             search_from = second_comma + 1;
         }
     }

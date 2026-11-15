@@ -374,3 +374,51 @@ pulsar_scenedb::pulsar_reflection::inventory::submit! {
         clear: instance_clear,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A material whose textures get no slot (the scene's texture table is
+    /// full): it cannot be resolved.
+    struct NoTextureSlot;
+
+    impl MaterialAsset for NoTextureSlot {
+        fn resolve(
+            &self,
+            _id: AssetId,
+            _version: u64,
+            _mirror: Option<&GpuMirrorHandle>,
+            _fallback: &SurfaceValues,
+        ) -> Result<ResolvedMaterial, String> {
+            Err("texture 'wood_albedo.png': the scene's texture table is full".into())
+        }
+    }
+
+    #[test]
+    fn a_material_that_cannot_be_resolved_draws_its_fallback_surface() {
+        let fallback = SurfaceValues {
+            base_color: [0.6, 0.4, 0.2, 1.0],
+            roughness: 0.3,
+            ..Default::default()
+        };
+        let source = MaterialSource {
+            asset: "materials/wood.material".into(),
+            surface: None,
+            fallback,
+        };
+        let mut instance = MaterialInstanceComponent::new(source.clone());
+        instance.bound = Some((source.asset_id(), 1, Arc::new(NoTextureSlot)));
+
+        let resolved = instance.resolve(None);
+        let expected = ResolvedMaterial::surface(&fallback);
+        // Drawn, with the constant surface values and no texture.
+        assert_eq!(
+            bytemuck::bytes_of(&resolved.row),
+            bytemuck::bytes_of(&expected.row)
+        );
+        assert_eq!(resolved.material_class, crate::MATERIAL_CLASS_DEFAULT);
+        assert_eq!(resolved.graph_hash, 0);
+        assert_eq!(resolved.row.tex_base_color, crate::GpuMaterial::NO_TEXTURE);
+    }
+}
