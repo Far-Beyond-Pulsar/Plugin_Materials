@@ -1,7 +1,7 @@
 // Transparent water template for the transparent pass.
 // Renders a animated wave surface with real alpha blending,
 // SSR-friendly low roughness, and volumetric fog integration.
-// (`radiant_eval_transparent(material, input, ambient) -> vec4f`).
+// (`radiant_eval_transparent(material, material_tex, input, ambient) -> vec4f`).
 
 fn wave_height(p: vec2<f32>, t: f32) -> f32 {
     let w  = sin(p.x * 1.80 + p.y * 1.20 + t * 0.70) * 0.35;
@@ -25,7 +25,7 @@ fn wave_normal(p: vec2<f32>, t: f32) -> vec3<f32> {
     return normalize(vec3<f32>(-g.x * 0.60, 1.0, -g.y * 0.60));
 }
 
-fn radiant_eval_transparent(material: GpuMaterial, input: MaterialInput, ambient: vec3<f32>) -> vec4<f32> {
+fn radiant_eval_transparent(material: GpuMaterial, material_tex: MaterialTextureData, input: MaterialInput, ambient: vec3<f32>) -> vec4<f32> {
     let t = f32(input.frame) * 0.016;
     let uv = input.tex_coords * 8.0;
 
@@ -42,7 +42,8 @@ fn radiant_eval_transparent(material: GpuMaterial, input: MaterialInput, ambient
     let shallow_col = vec3<f32>(0.040, 0.220, 0.280);
     let reflection  = vec3<f32>(0.100, 0.160, 0.230);
     let depth_factor = clamp(NdV * 0.80 + 0.20, 0.0, 1.0);
-    let color = mix(mix(deep_col, shallow_col, depth_factor), reflection, fresnel);
+    let base = sample_texture(material_tex.base_color, input.tex_coords, vec4<f32>(1.0));
+    let color = mix(mix(deep_col, shallow_col, depth_factor), reflection, fresnel) * base.rgb * material.base_color.rgb;
 
     // Partial transparency — more transparent straight-on, opaque at grazing
     let alpha = mix(0.60, 0.90, fresnel);

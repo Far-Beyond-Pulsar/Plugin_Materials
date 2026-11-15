@@ -14,7 +14,7 @@ pub const ANISOTROPIC: &str = include_str!("../templates/anisotropic.wgsl");
 pub const SKIN: &str = include_str!("../templates/skin.wgsl");
 pub const FOLIAGE: &str = include_str!("../templates/foliage.wgsl");
 /// The transparent drawers' default surface
-/// (`radiant_eval_transparent(material, input, ambient)`).
+/// (`radiant_eval_transparent(material, material_tex, input, ambient)`).
 pub const TRANSPARENT_DEFAULT: &str = include_str!("../templates/transparent_default.wgsl");
 pub const OPAL: &str = include_str!("../templates/opal.wgsl");
 pub const GLASS: &str = include_str!("../templates/glass.wgsl");

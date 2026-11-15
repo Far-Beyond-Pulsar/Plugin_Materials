@@ -495,4 +495,62 @@ mod usage_tests {
         node(&mut graph, "out", "fragment_output", None);
         assert!(texture_uses(&graph).is_empty());
     }
+
+    /// A foliage graph: base colour and a normal map, cut out by the base
+    /// colour's alpha at the mesh UV. `z_leaf.png` sorts after the normal
+    /// map, so only the mask rule can put it first.
+    fn foliage(uv_through: Option<&str>) -> GraphDescription {
+        let mut graph = GraphDescription::new("foliage");
+        node(&mut graph, "out", "fragment_output", None);
+        node(&mut graph, "uv", "frag_uv", None);
+        node(&mut graph, "leaf", "sample_texture", Some("z_leaf.png"));
+        node(&mut graph, "nrm", "sample_texture", Some("a_normal.png"));
+        node(&mut graph, "alpha", "component_a", None);
+        match uv_through {
+            Some(kind) => {
+                node(&mut graph, "warp", kind, None);
+                connect(&mut graph, "uv", "warp", "a");
+                connect(&mut graph, "warp", "leaf", "uv");
+            }
+            None => connect(&mut graph, "uv", "leaf", "uv"),
+        }
+        connect(&mut graph, "leaf", "out", "base_color");
+        connect(&mut graph, "nrm", "out", "normal");
+        connect(&mut graph, "leaf", "alpha", "vec");
+        connect(&mut graph, "alpha", "out", "opacity_mask");
+        graph
+    }
+
+    #[test]
+    fn a_texture_alpha_mask_is_ordinal_zero() {
+        let graph = foliage(None);
+        assert_eq!(
+            opacity_mask(&graph),
+            GraphMask::TextureAlpha("z_leaf.png".into())
+        );
+        assert_eq!(
+            texture_assets(&graph).unwrap(),
+            vec!["z_leaf.png".to_string(), "a_normal.png".to_string()],
+            "the mask texture is the row's base colour slot, which the depth passes cut out with"
+        );
+    }
+
+    #[test]
+    fn a_mask_sampled_off_the_mesh_uv_is_not_a_texture_alpha() {
+        let graph = foliage(Some("multiply"));
+        assert_eq!(opacity_mask(&graph), GraphMask::Other);
+        assert_eq!(
+            texture_assets(&graph).unwrap(),
+            vec!["a_normal.png".to_string(), "z_leaf.png".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_graph_without_a_mask_is_not_masked() {
+        let mut graph = GraphDescription::new("opaque");
+        node(&mut graph, "out", "fragment_output", None);
+        node(&mut graph, "tex", "sample_texture", Some("albedo.png"));
+        connect(&mut graph, "tex", "out", "base_color");
+        assert_eq!(opacity_mask(&graph), GraphMask::None);
+    }
 }
