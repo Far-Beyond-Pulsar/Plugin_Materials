@@ -21,7 +21,7 @@ profiling = { workspace = true }
 gpui-ce = { workspace = true }
 ui = { workspace = true }
 
-plugin_editor_api = { workspace = true }
+plugin_editor_api = { workspace = true, features = ["editor"] }
 ui_common = { workspace = true }
 pulsar_reflection = { workspace = true }
 engine_state = { workspace = true }

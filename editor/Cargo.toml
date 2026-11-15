@@ -8,7 +8,7 @@ description = "Materials (pulsar.materials): the editor crate -- the material gr
 name = "materials_editor"
 
 [dependencies]
-plugin_editor_api = { workspace = true }
+plugin_editor_api = { workspace = true, features = ["editor"] }
 # The material graph editor (the `.material` asset's editor).
 materials_graph_editor = { workspace = true }
 plugin_manager = { workspace = true }

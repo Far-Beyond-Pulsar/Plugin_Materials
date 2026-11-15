@@ -10,7 +10,7 @@ autoexamples = false
 # The editor's registration (the material graph editor's provider) and the
 # crates it needs. A game links the root without it, so it takes no editor
 # dependency.
-editor = ["dep:materials_editor", "dep:plugin_manager"]
+editor = ["dep:materials_editor", "dep:plugin_manager", "plugin_editor_api/editor"]
 
 [dependencies]
 # Image and material files changed on disk are asset updates (`engine_fs::AssetChangeKind`).
