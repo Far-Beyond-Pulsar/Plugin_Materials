@@ -100,6 +100,7 @@ impl Feature for MaterialsFeature {
             )
             .with_data_only()
             .with_generated_pins()
+            .once_per_frame()
             .at(HOST_INPUTS, 0),
         );
     }
