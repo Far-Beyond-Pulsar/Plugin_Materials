@@ -2,11 +2,7 @@
 
 use gpui::*;
 use ui::dock::{Panel, PanelEvent};
-use ui::{
-    ActiveTheme, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex, v_flex,
-};
+use ui::{v_flex, ActiveTheme};
 
 use super::mesh::{self, PreviewMeshData};
 use super::renderer::PreviewRenderer;
@@ -29,7 +25,6 @@ pub struct MaterialPreviewPanel {
     /// camera, and scroll zooms in/out while this is true.
     orbiting: bool,
     last_drag_pos: Option<Point<Pixels>>,
-    subscriptions: Vec<Subscription>,
     /// When the last frame was rendered; paces the animation and derives `dt`.
     last_frame: Option<std::time::Instant>,
     surface_animation: plugin_editor_api::surface_animation::SurfaceAnimation,
@@ -56,7 +51,6 @@ impl MaterialPreviewPanel {
             shader_build: None,
             orbiting: false,
             last_drag_pos: None,
-            subscriptions: Vec::new(),
             last_frame: None,
             surface_animation: Default::default(),
         }
@@ -141,7 +135,7 @@ impl MaterialPreviewPanel {
         }
     }
 
-    pub fn rebuild_surface(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn rebuild_surface(&mut self, window: &mut Window, _cx: &mut Context<Self>) {
         if !self.needs_rebuild {
             return;
         }
@@ -196,20 +190,6 @@ impl MaterialPreviewPanel {
 
         self.surface_handle = Some(surface);
         self.needs_rebuild = false;
-    }
-
-    pub fn update_mesh(&mut self, mesh_type: MeshType) {
-        self.current_mesh = mesh_type;
-        let mesh_data = generate_mesh_data(mesh_type);
-        self.renderer
-            .camera
-            .frame_bounding_radius(mesh_data.bounding_radius());
-        self.renderer.update_mesh(
-            &mesh_data.vertices,
-            &mesh_data.indices,
-            mesh_data.index_count,
-        );
-        self.needs_rebuild = true;
     }
 
     /// Compile `wgsl_source` into the preview pipeline without blocking the

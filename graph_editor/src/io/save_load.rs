@@ -375,11 +375,11 @@ fn contained_nodes(canvas: &graphy_gpui::canvas::GraphCanvas) -> Vec<Vec<String>
 #[cfg(test)]
 mod tests {
     use super::{
-        GRAPH_SAVE_FILE_NAME, ShaderAsset, ShaderEditorState, decode, encode, formats,
-        resolve_shader_path,
+        decode, encode, formats, resolve_shader_path, ShaderAsset, ShaderEditorState,
+        GRAPH_SAVE_FILE_NAME,
     };
-    use graphy::GraphDescription;
     use graphy::core::GraphComment;
+    use graphy::GraphDescription;
     use graphy::{
         Connection, ConnectionType, DataType, NodeInstance, Pin, PinInstance, PinType, Position,
     };

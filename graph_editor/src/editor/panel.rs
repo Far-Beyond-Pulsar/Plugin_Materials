@@ -11,15 +11,15 @@ use std::sync::Arc;
 
 use gpui::*;
 use graphy::{GraphCommand, GraphDescription, NodeInstance, Position};
-use graphy_gpui::canvas::{CanvasEvent, GraphCanvas, system_fonts};
-use graphy_gpui::{Action, GraphProfile as _, MenuItem, MenuTarget};
+use graphy_gpui::canvas::{system_fonts, CanvasEvent, GraphCanvas};
+use graphy_gpui::{Action, GraphProfile as _};
 use graphy_render::Vec2;
 use plugin_editor_api::{DocumentId, History, SharedHistory, UndoEntry, UndoService};
 use serde_json::Value;
-use ui::VirtualListScrollHandle;
 use ui::input::{InputEvent, InputState};
 use ui::scroll::ScrollbarState;
 use ui::workspace::Workspace;
+use ui::VirtualListScrollHandle;
 use ui_common::reflected_properties_panel::PropertyStateManager;
 use uuid::Uuid;
 

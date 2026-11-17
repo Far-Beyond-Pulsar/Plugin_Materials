@@ -19,9 +19,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use ui::{
-    ActiveTheme, Disableable, Icon, IconName,
     button::{Button, ButtonVariants as _},
-    h_flex,
+    h_flex, ActiveTheme, Disableable, Icon, IconName,
 };
 
 use crate::actions::{AddGraphComment, CompileShader, ReloadShaderFromDisk};
@@ -172,7 +171,7 @@ impl ToolbarRenderer {
                         Button::new("toolbar-add-comment")
                             .icon(IconName::Message)
                             .tooltip("Add Comment to Graph")
-                            .on_click(cx.listener(|panel, _, window, cx| {
+                            .on_click(cx.listener(|panel, _, _window, cx| {
                                 panel.add_comment(cx);
                             })),
                     ),
@@ -212,7 +211,11 @@ impl ToolbarRenderer {
                             .update(cx, |canvas, cx| canvas.refresh_scene(cx));
                         cx.notify();
                     }));
-                if previews_on { btn.primary() } else { btn }
+                if previews_on {
+                    btn.primary()
+                } else {
+                    btn
+                }
             }))
             // ── Group 6 · Shader Model & Preview ─────────────────────────────
             .child(

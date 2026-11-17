@@ -112,7 +112,6 @@ pub struct PreviewRenderer {
     sky_bind_group: Option<BindGroup>,
     plain_black_background: bool,
     pub camera: OrbitCamera,
-    shader_module: Option<ShaderModule>,
     surface_config: Option<SurfaceConfiguration>,
     needs_recompile: bool,
     needs_upload: bool,
@@ -215,7 +214,6 @@ impl PreviewRenderer {
                 near: 0.1,
                 far: 100.0,
             },
-            shader_module: None,
             surface_config: None,
             needs_recompile: true,
             needs_upload: true,
@@ -584,11 +582,6 @@ impl PreviewRenderer {
 
     pub fn has_material_pipeline(&self) -> bool {
         self.draw.is_some()
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32, config: &SurfaceConfiguration) {
-        self.surface_config = Some(config.clone());
-        self.camera.aspect = width as f32 / height as f32;
     }
 }
 

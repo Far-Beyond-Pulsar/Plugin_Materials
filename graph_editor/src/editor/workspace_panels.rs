@@ -5,8 +5,8 @@
 
 use gpui::*;
 use ui::{
-    ActiveTheme,
     dock::{Panel, PanelEvent},
+    ActiveTheme,
 };
 
 use crate::editor::panel::ShaderEditorPanel;

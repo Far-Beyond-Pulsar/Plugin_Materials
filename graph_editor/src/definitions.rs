@@ -6,8 +6,8 @@
 //! to node metadata throughout the application.
 
 use graphy::DataType;
-use psgc::NodeTypes;
 use psgc::metadata::get_shader_nodes;
+use psgc::NodeTypes;
 use std::collections::HashMap;
 
 // ============================================================================
