@@ -7,7 +7,7 @@
 //! confused with a reflected Rust one.
 
 use graphy::{ChainResolver, Compatibility, DataType, StructuralResolver, TypeResolver};
-use graphy_render::{Color, geom::rgba};
+use graphy_render::{geom::rgba, Color};
 
 /// Connection rules between WGSL pin types: the same type connects, a
 /// single-uppercase-letter generic takes any type, everything else does not.
@@ -88,10 +88,9 @@ mod tests {
             r.compatibility(&t("vec3<f32>"), &t("vec4<f32>")),
             Compatibility::Incompatible(_)
         ));
-        assert!(
-            !r.compatibility(&t("f32"), &t("TextureSrc"))
-                .is_connectable()
-        );
+        assert!(!r
+            .compatibility(&t("f32"), &t("TextureSrc"))
+            .is_connectable());
     }
 
     #[test]
@@ -106,10 +105,9 @@ mod tests {
     fn execution_never_meets_data() {
         let r = resolver();
         assert!(!r.compatibility(&DataType::Exec, &t("f32")).is_connectable());
-        assert!(
-            r.compatibility(&DataType::Exec, &DataType::Exec)
-                .is_connectable()
-        );
+        assert!(r
+            .compatibility(&DataType::Exec, &DataType::Exec)
+            .is_connectable());
     }
 
     #[test]

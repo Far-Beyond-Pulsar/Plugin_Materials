@@ -1,10 +1,10 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 
-use graphy::ConnectionType;
 use graphy::core::GraphComment;
+use graphy::ConnectionType;
 use graphy::{Connection, GraphDescription, NodeInstance, PinInstance, Position};
 use plugin_editor_api::{AiToolDefinition, PluginError};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -86,15 +86,6 @@ fn resolve_session_key(guard: &RuntimeState, requested: &Path) -> Option<PathBuf
     }
 
     None
-}
-
-fn active_file() -> Result<PathBuf> {
-    state()
-        .lock()
-        .map_err(|_| anyhow!("AI session state lock poisoned"))?
-        .active_file
-        .clone()
-        .ok_or_else(|| anyhow!("No active blueprint file in AI session"))
 }
 
 fn with_session<R>(f: impl FnOnce(&AiSession) -> Result<R>) -> Result<R> {
@@ -765,12 +756,4 @@ pub fn execute_compiled_tool(
             debug!(tool = tool_name, file = %file_path.display(), elapsed_ms = started_at.elapsed().as_millis() as u64, "blueprint execute_compiled_tool end");
             value
         })
-}
-
-pub fn execute_ai_tool(
-    file_path: &Path,
-    tool_name: &str,
-    tool_args: Value,
-) -> Result<Value, PluginError> {
-    execute_compiled_tool(file_path, tool_name, tool_args)
 }

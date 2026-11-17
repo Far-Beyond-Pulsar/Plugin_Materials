@@ -7,19 +7,18 @@
 //! sample wired to the output, and so on), and offers each as the default
 //! material of its mesh slot.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use plugin_editor_api::{
     CompanionOutput, ImportCompanion, ImportCompanionContext, ImportOffer, ImportProbe,
     SourceImageRole, SourceSurface,
 };
 use psgc::{
-    Connection, ConnectionType, DataType, GraphDescription, NodeInstance, Pin, PinInstance,
-    PinType, Position,
+    Connection, ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
 };
 
 use crate::definitions::NodeDefinitions;
-use crate::io::formats::{ShaderAsset, serialize_shader_with_header};
+use crate::io::formats::{serialize_shader_with_header, ShaderAsset};
 
 /// The id stored with an import, so a re-import runs this companion again.
 pub const COMPANION_ID: &str = "pulsar.shader.material_from_images";
@@ -370,6 +369,7 @@ mod tests {
     use super::*;
     use crate::io::formats::deserialize_shader;
     use plugin_editor_api::SourceImage;
+    use std::path::PathBuf;
 
     fn surface(roles: &[(SourceImageRole, &str)]) -> SourceSurface {
         SourceSurface {
@@ -413,12 +413,10 @@ mod tests {
         };
         assert!(feeds("sample_2", "texel") && feeds("uv", "uv"));
         assert!(feeds("normal_in", "normal") && feeds("position_in", "position"));
-        assert!(
-            graph
-                .connections
-                .iter()
-                .all(|c| !(c.source_node == "sample_2" && c.target_node == "output"))
-        );
+        assert!(graph
+            .connections
+            .iter()
+            .all(|c| !(c.source_node == "sample_2" && c.target_node == "output")));
         assert_eq!(
             graph.nodes["sample_1"].properties["texture"],
             serde_json::json!("mr.png")
@@ -514,8 +512,8 @@ mod tests {
     }
 
     #[test]
-    fn a_single_surface_model_gets_one_material_named_for_the_model_and_images_outside_the_project_are_copied_flat()
-     {
+    fn a_single_surface_model_gets_one_material_named_for_the_model_and_images_outside_the_project_are_copied_flat(
+    ) {
         let outside = TempDir::new();
         let project = TempDir::new();
         let root = project.path();
