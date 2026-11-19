@@ -50,9 +50,11 @@ pub const MATERIAL_ROW_SNIPPET: helio_core::shader::ShaderSnippet =
     helio_core::wgsl_snippet!("//!use material_row", "../shaders/material_row.wgsl");
 
 /// Material evaluation in WGSL (`//!use material_surface`, with
-/// `material_row` and `specular_aa`): the texture metadata
-/// (`MaterialTextureSlot`/`MaterialTextureData`), `MaterialInput` (the point
-/// a drawer hands a material), `SurfaceData` (what it gets back),
+/// `material_row`, `specular_aa` and the frame's `frame_surface`): the
+/// texture metadata (`MaterialTextureSlot`/`MaterialTextureData`),
+/// `MaterialInput` (the point a drawer hands a material); what it gets back
+/// is the frame's `SurfaceData` (`helio_frame_api::gbuffer::SURFACE_SNIPPET`:
+/// the surface a G-buffer texel and a ray's hit both hold);
 /// `material_at` (a row, or the stand-in), `material_texture_data`,
 /// `sample_texture` and `default_pbr_surface`. The reader declares the
 /// table's bindings as `materials`, `material_textures`, `scene_textures`
@@ -64,8 +66,10 @@ pub const MATERIAL_SURFACE_SNIPPET: helio_core::shader::ShaderSnippet = helio_co
 
 /// Every material snippet, in the order they are prepended: what a
 /// drawer's material program resolves (`RadiantTemplate::compose` adds
-/// them itself).
-pub const MATERIAL_SNIPPETS: [helio_core::shader::ShaderSnippet; 4] = [
+/// them itself). The frame's surface (`//!use frame_surface`) is the
+/// struct a material returns; a program opts into it with the others.
+pub const MATERIAL_SNIPPETS: [helio_core::shader::ShaderSnippet; 5] = [
+    helio_frame_api::gbuffer::SURFACE_SNIPPET,
     MATERIAL_ROW_SNIPPET,
     SPECULAR_AA_SNIPPET,
     PBR_EVAL_SNIPPET,

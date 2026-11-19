@@ -20,6 +20,7 @@ enable wgpu_binding_array;
 //!use material_row
 //!use specular_aa
 //!use material_surface
+//!use frame_surface
 
 // The viewer's clock: its frame, and the time graph `time` nodes read (the
 // template's `radiant_graph_time` reads `globals.time` from the tag below).

@@ -1,14 +1,16 @@
 // Material evaluation in WGSL (helio-mats `MATERIAL_SURFACE_SNIPPET`,
 // `//!use material_surface`): what a drawer of any kind calls to shade a
 // point of its surface with a material. Use it with `//!use material_row`,
-// `//!use specular_aa` and `//!use pbr_eval` (the `SURFACE_FLAG_*` a
-// surface's `flags` carries to the lighting).
+// `//!use specular_aa`, `//!use pbr_eval` and `//!use frame_surface` (the
+// frame's `SurfaceData` and its `SURFACE_FLAG_*`,
+// `helio_frame_api::gbuffer::SURFACE_SNIPPET`).
 //
 // The drawer hands the material a `MaterialInput` (`material_row`'s: the
 // point as a material sees it: where it is, its frame, its texture
 // coordinate, the view and the frame),
-// and gets a `SurfaceData` back, which it writes to the G-buffer (or
-// lights, forward). Templates (`radiant_eval_surface`, a material class's
+// and gets the frame's `SurfaceData` back, which it writes to the G-buffer
+// (`gbuffer_output`), packs into a ray's hit (`scene_surface_pack`) or
+// lights (forward). Templates (`radiant_eval_surface`, a material class's
 // shading) and material graphs read only `MaterialInput`'s fields and the
 // frame clock (`radiant_graph_time`, which a drawer whose `Globals` carries
 // `time` supplies), so a material shades the same on a mesh, a terrain or a
@@ -45,24 +47,6 @@ struct MaterialTextureData {
     specular_color:     MaterialTextureSlot,
     specular_weight:    MaterialTextureSlot,
     params:             vec4<f32>,  // x=normal_scale, y=occlusion_strength, z=alpha_cutoff
-}
-
-// What a material makes of a point: what the drawer writes.
-struct SurfaceData {
-    albedo:              vec4<f32>,
-    normal:              vec3<f32>,
-    ao:                  f32,
-    roughness:           f32,
-    metallic:            f32,
-    specular_f0:         vec3<f32>,
-    emissive:            vec3<f32>,
-    alpha:               f32,
-    flags:               u32,
-    subsurface_color:    vec3<f32>,
-    subsurface_radius:   f32,
-    roughness_aniso_x:   f32,
-    roughness_aniso_y:   f32,
-    aniso_rotation:      f32,
 }
 
 // Material `id`'s row, or the stand-in where the table holds none (a

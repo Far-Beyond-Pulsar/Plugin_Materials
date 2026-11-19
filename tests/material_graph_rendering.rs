@@ -227,6 +227,7 @@ enable wgpu_binding_array;
 //!use material_row
 //!use specular_aa
 //!use material_surface
+//!use frame_surface
 
 @group(1) @binding(0) var<storage, read> materials: array<GpuMaterial>;
 @group(1) @binding(1) var<storage, read> material_textures: array<MaterialTextureData>;
