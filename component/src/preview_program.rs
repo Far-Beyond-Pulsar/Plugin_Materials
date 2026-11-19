@@ -16,7 +16,6 @@ use crate::graph_preview::GraphPreview;
 /// is all its stages read); the uniforms live in group 3.
 const VIEWER_PROGRAM: &str = r#"
 enable wgpu_binding_array;
-//!use pbr_eval
 //!use material_row
 //!use specular_aa
 //!use material_surface

@@ -289,7 +289,11 @@ impl Gpu {
             device,
             "Shading Cost Patch Shader",
             helio_core::include_wgsl!("../shaders/profile_patch.wgsl"),
-            &[SURFACE_PROBE, helio_mats::PBR_EVAL_SNIPPET],
+            &[
+                SURFACE_PROBE,
+                helio_frame_api::gbuffer::SURFACE_SNIPPET,
+                helio_frame_api::gbuffer::BSDF_SNIPPET,
+            ],
         );
         let patch_pipeline = fullscreen_pipeline(
             device,
@@ -710,7 +714,11 @@ mod tests {
             ),
             helio_core::shader::resolve_with(
                 include_str!("../shaders/profile_patch.wgsl"),
-                &[SURFACE_PROBE, helio_mats::PBR_EVAL_SNIPPET],
+                &[
+                    SURFACE_PROBE,
+                    helio_frame_api::gbuffer::SURFACE_SNIPPET,
+                    helio_frame_api::gbuffer::BSDF_SNIPPET,
+                ],
             ),
         ];
         for source in sources {

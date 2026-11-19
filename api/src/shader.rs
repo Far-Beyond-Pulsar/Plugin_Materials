@@ -1,29 +1,7 @@
-//! Shared PBR/BRDF evaluation — `fresnel_schlick`, the distribution and geometry terms.
-//!
-//! Lives alongside [`crate::material`] and [`crate::radiant`], which already own the
-//! CPU side of the material model and consume this text directly (manual
-//! concatenation, not `helio-core`'s generic shader-snippet mechanism — see
-//! `helio-core/src/shader/mod.rs`'s doc for why that mechanism only owns the
-//! generic prelude and pass-declared snippets, never a specific domain's text).
-//!
-//! Registering a module here is the step that is easy to miss and gives no warning when
-//! missed: the `//!use` marker is an ordinary WGSL comment, so an unregistered module
-//! leaves the marker inert, the source passes through untouched, and the shader fails at
-//! `create_shader_module` with "no definition in scope" for a function that plainly
-//! exists. That is exactly how `deferred_lighting.wgsl` and `forward_lit.wgsl` came to be
-//! uncompilable — which on this path takes out lighting entirely.
-pub const PBR_EVAL: &str = include_str!("../shaders/pbr_eval.wgsl");
-
-/// Marker opting a shader into [`PBR_EVAL`]. Must appear in the source.
-pub const PBR_MARKER: &str = "//!use pbr_eval";
-
-/// [`helio_core::shader::ShaderSnippet`] for [`PBR_EVAL`]. Real consumers
-/// (gbuffer/forward-lit/deferred-light templates) currently splice
-/// [`PBR_EVAL`] in by hand rather than through `helio_core::shader`'s
-/// marker mechanism, but this is the snippet form for anything that wants
-/// to go through `resolve_with`/`module_with` instead.
-pub const PBR_EVAL_SNIPPET: helio_core::shader::ShaderSnippet =
-    helio_core::wgsl_snippet!(PBR_MARKER, "../shaders/pbr_eval.wgsl");
+//! The materials' WGSL: the material row, its evaluation and specular
+//! anti-aliasing. (How a surface reflects light is the frame's BSDF,
+//! `helio_frame_api::gbuffer::BSDF_SNIPPET`, beside the `SurfaceData` a
+//! material returns.)
 
 /// Specular anti-aliasing (`normal_map_roughness`, `geometric_roughness`,
 /// `specular_aa_roughness`): roughness widened by the normals a pixel
@@ -79,11 +57,10 @@ pub const MATERIAL_GRADIENTS_SNIPPET: helio_core::shader::ShaderSnippet = helio_
 /// drawer's material program resolves (`RadiantTemplate::compose` adds
 /// them itself). The frame's surface (`//!use frame_surface`) is the
 /// struct a material returns; a program opts into it with the others.
-pub const MATERIAL_SNIPPETS: [helio_core::shader::ShaderSnippet; 6] = [
+pub const MATERIAL_SNIPPETS: [helio_core::shader::ShaderSnippet; 5] = [
     helio_frame_api::gbuffer::SURFACE_SNIPPET,
     MATERIAL_ROW_SNIPPET,
     SPECULAR_AA_SNIPPET,
-    PBR_EVAL_SNIPPET,
     MATERIAL_SURFACE_SNIPPET,
     MATERIAL_GRADIENTS_SNIPPET,
 ];
