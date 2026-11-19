@@ -42,6 +42,22 @@ root without `editor`; the editor links it with.
 - **Its standalone hosts also compose**: none (demos and GPU tests
   draw a whole scene; the plugin itself does not depend on these).
 
+## Materials outside a fragment stage
+
+A material is one evaluator (`material_surface`, the templates, the graphs)
+for every drawer and every ray hit. A compute stage, which has no implicit
+derivatives (virtual geometry's visibility-buffer shade, the meshes' hit
+surfaces), opts into `//!use material_gradients`, sets the footprint's
+gradients for each point and lowers its composed program with
+`helio_mats::shader::explicit_gradients`. `MATERIAL_SURFACE_DIFFUSE` (a
+pipeline constant, false for drawers) makes `default_pbr_surface` read only
+what a diffuse consumer needs (a ray stream's `SurfaceDetail::Diffuse`).
+A thin two-sided surface lets `material_transmitted` through (its
+transmission share of its colour), the one description the raster's leaves
+and a hit's share. A reader that must not resolve an instance (a ray-traced
+scene's projection) reads its mirrored row and key with
+`instance::resolved_row` / `resolved_key`.
+
 ## Building and testing
 
 Like [Plugin_Physics](https://github.com/Far-Beyond-Pulsar/Plugin_Physics), this plugin's crates are members
