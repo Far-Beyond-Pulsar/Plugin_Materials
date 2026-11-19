@@ -56,11 +56,10 @@ impl RadiantTemplate {
         let mut all = crate::MATERIAL_SNIPPETS.to_vec();
         all.extend_from_slice(snippets);
         #[allow(unused_mut)]
-        let mut src = helio_core::shader::resolve_with(&joined, &all)
-            .replace(
-                "binding_array<texture_2d<f32>, 256>",
-                &format!("binding_array<texture_2d<f32>, {max_tex_str}>"),
-            );
+        let mut src = helio_core::shader::resolve_with(&joined, &all).replace(
+            "binding_array<texture_2d<f32>, 256>",
+            &format!("binding_array<texture_2d<f32>, {max_tex_str}>"),
+        );
 
         // wgpu's Naga requires `enable wgpu_binding_array;` for binding_array
         // support.  Browser WebGPU (Chrome's Tint) does not recognise this

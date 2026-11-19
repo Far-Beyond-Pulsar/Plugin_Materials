@@ -280,6 +280,50 @@ pub fn row_of(instance: Entity) -> u32 {
     instance.index()
 }
 
+/// The material row `instance` resolved to when it bound, as `mirror` holds
+/// it: what a reader that must not resolve (a projection holding the scene
+/// lock: resolving a graph registers and cooks textures and takes the
+/// texture store's write lock) reads of an instance. `None` for an instance
+/// whose row is not mirrored yet.
+///
+/// The materials' columns are registered dirty-tracked
+/// ([`register_columns`]), so the mirror keeps a CPU shadow of each row
+/// this reads: that is this function's contract rather than each reader's
+/// assumption (`installed_plugins`' ray-tier acceptance renders a graph
+/// material's colour through it).
+pub fn resolved_row(mirror: &GpuMirrorHandle, instance: Entity) -> Option<crate::GpuMaterial> {
+    let bytes = mirror.store().read_dirty_tracked_row_bytes(
+        MaterialComponent::packed_gpu_component_id(),
+        row_of(instance),
+    )?;
+    bytemuck::try_pod_read_unaligned::<MaterialComponent>(&bytes)
+        .ok()
+        .map(crate::GpuMaterial::from)
+}
+
+/// The shading key (material class, graph hash) `instance` resolved to,
+/// as `mirror` holds it ([`resolved_row`]'s contract): what selects the
+/// program its material is evaluated by. `None` for an instance whose key
+/// is not mirrored yet or is no live instance.
+pub fn resolved_key(mirror: &GpuMirrorHandle, instance: Entity) -> Option<ResolvedKey> {
+    let bytes = mirror.store().read_dirty_tracked_row_bytes(
+        MaterialKeyComponent::packed_gpu_component_id(),
+        row_of(instance),
+    )?;
+    let key = bytemuck::try_pod_read_unaligned::<MaterialKeyComponent>(&bytes).ok()?;
+    (key.live != 0).then(|| ResolvedKey {
+        material_class: key.material_class,
+        graph_hash: (u64::from(key.graph_hash_hi) << 32) | u64::from(key.graph_hash_lo),
+    })
+}
+
+/// An instance's shading key ([`resolved_key`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResolvedKey {
+    pub material_class: u32,
+    pub graph_hash: u64,
+}
+
 // ── Assets: declared, bound, mirrored ──────────────────────────────────────
 
 fn collect_instance_handles(value: *const (), out: &mut Vec<HandleId>) {

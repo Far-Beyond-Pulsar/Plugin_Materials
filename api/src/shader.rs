@@ -64,17 +64,127 @@ pub const MATERIAL_SURFACE_SNIPPET: helio_core::shader::ShaderSnippet = helio_co
     "../shaders/material_surface.wgsl"
 );
 
+/// The gradients a material reads its textures with in a stage without
+/// implicit derivatives (`//!use material_gradients`, with
+/// `material_surface`): `material_duv_dx` / `_dy`, `material_dn_dx` / `_dy`
+/// and `material_slot_gradient`. A compute program that evaluates materials
+/// opts in, sets them for each point and is lowered with
+/// [`explicit_gradients`].
+pub const MATERIAL_GRADIENTS_SNIPPET: helio_core::shader::ShaderSnippet = helio_core::wgsl_snippet!(
+    "//!use material_gradients",
+    "../shaders/material_gradients.wgsl"
+);
+
 /// Every material snippet, in the order they are prepended: what a
 /// drawer's material program resolves (`RadiantTemplate::compose` adds
 /// them itself). The frame's surface (`//!use frame_surface`) is the
 /// struct a material returns; a program opts into it with the others.
-pub const MATERIAL_SNIPPETS: [helio_core::shader::ShaderSnippet; 5] = [
+pub const MATERIAL_SNIPPETS: [helio_core::shader::ShaderSnippet; 6] = [
     helio_frame_api::gbuffer::SURFACE_SNIPPET,
     MATERIAL_ROW_SNIPPET,
     SPECULAR_AA_SNIPPET,
     PBR_EVAL_SNIPPET,
     MATERIAL_SURFACE_SNIPPET,
+    MATERIAL_GRADIENTS_SNIPPET,
 ];
+
+/// A composed material program (`RadiantTemplate::compose`, and for a
+/// device without binding arrays `apply_webgpu_material_bindings` first)
+/// lowered for a stage without implicit derivatives: every texture read of
+/// the evaluator (`sample_texture`) at the gradients the stage set
+/// (`//!use material_gradients`, through each slot's UV transform), a
+/// material graph's own reads at `material_duv_dx` / `_dy`, specular
+/// anti-aliasing's normal derivatives as `material_dn_dx` / `_dy`, and any
+/// other derivative a graph takes (a screen-space DDX node) as zero: a
+/// compute stage has no neighbouring invocations of the same surface.
+/// `max_textures` and `bindless` are the program's material binding
+/// ([`crate::MaterialBindingConfig`]).
+///
+/// The one lowering every compute evaluator of materials uses (virtual
+/// geometry's visibility-buffer shade: a pixel's analytic derivatives; the
+/// meshes' hit surfaces: a ray cone's footprint), so a material reads its
+/// textures alike on the raster, in a visibility buffer and at a hit.
+pub fn explicit_gradients(src: &str, max_textures: usize, bindless: bool) -> String {
+    const GRAD: &str = "uv, material_slot_gradient(slot, material_duv_dx), material_slot_gradient(slot, material_duv_dy)";
+    let mut out = src
+        .replace("dpdx(n)", "material_dn_dx")
+        .replace("dpdy(n)", "material_dn_dy")
+        // The expanded binding's graph helper (`pulsar_graph_sample`).
+        .replace("let dx = dpdx(uv);", "let dx = material_duv_dx;")
+        .replace("let dy = dpdy(uv);", "let dy = material_duv_dy;");
+    if bindless {
+        out = out.replace(
+            "textureSample(scene_textures[slot.texture_index], scene_sampler, uv)",
+            &format!(
+                "textureSampleGrad(scene_textures[slot.texture_index], scene_sampler, {GRAD})"
+            ),
+        );
+    } else {
+        for index in 0..max_textures {
+            out = out.replace(
+                &format!("textureSampleLevel(scene_texture_{index}, scene_sampler, uv, 0.0)"),
+                &format!("textureSampleGrad(scene_texture_{index}, scene_sampler, {GRAD})"),
+            );
+        }
+    }
+    // What is left reads with implicit derivatives: a graph's own samples.
+    out = rewrite_calls(&out, "textureSample(", |args| {
+        (args.len() == 3).then(|| {
+            format!(
+                "textureSampleGrad({}, {}, {}, material_duv_dx, material_duv_dy)",
+                args[0], args[1], args[2]
+            )
+        })
+    });
+    for derivative in [
+        "dpdx(",
+        "dpdy(",
+        "fwidth(",
+        "dpdxCoarse(",
+        "dpdyCoarse(",
+        "dpdxFine(",
+        "dpdyFine(",
+        "fwidthCoarse(",
+        "fwidthFine(",
+    ] {
+        out = rewrite_calls(&out, derivative, |args| {
+            (args.len() == 1).then(|| format!("(({0}) - ({0}))", args[0]))
+        });
+    }
+    out
+}
+
+/// `source` with every call `name(args)` (`name` ends in `(`, and is not
+/// the tail of a longer identifier) replaced by what `rewrite` makes of its
+/// arguments (kept as it is where `rewrite` returns `None`).
+fn rewrite_calls(source: &str, name: &str, rewrite: impl Fn(&[&str]) -> Option<String>) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut cursor = 0;
+    while let Some(offset) = source[cursor..].find(name) {
+        let start = cursor + offset;
+        let joined = source[..start]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_');
+        let Some((end, args)) = (!joined)
+            .then(|| call_arguments(source, start + name.len() - 1))
+            .flatten()
+        else {
+            out.push_str(&source[cursor..start + name.len()]);
+            cursor = start + name.len();
+            continue;
+        };
+        let parts = split_wgsl_arguments(args);
+        out.push_str(&source[cursor..start]);
+        match rewrite(&parts) {
+            Some(call) => out.push_str(&call),
+            None => out.push_str(&source[start..end]),
+        }
+        cursor = end;
+    }
+    out.push_str(&source[cursor..]);
+    out
+}
 
 /// Replace the texture table's binding array with one binding per texture.
 ///
@@ -123,7 +233,9 @@ fn expanded_sample_switch(selector: &str, max_textures: usize, fallback: &str) -
             "        case {index}u: {{ return textureSampleLevel(scene_texture_{index}, scene_sampler, uv, 0.0); }}\n",
         ));
     }
-    switch.push_str(&format!("        default: {{ return {fallback}; }}\n    }}"));
+    switch.push_str(&format!(
+        "        default: {{ return {fallback}; }}\n    }}"
+    ));
     switch
 }
 
@@ -204,9 +316,7 @@ fn lower_graph_texture_samples(source: &str, max_textures: usize) -> String {
         if let (Some(texture_field), true, Some((helper, helper_index))) =
             (texture_field, reads_scene_sampler, variant)
         {
-            if GRAPH_FIELDS.contains(&texture_field)
-                && max_textures > 0
-            {
+            if GRAPH_FIELDS.contains(&texture_field) && max_textures > 0 {
                 rewritten.push_str(&source[cursor..start]);
                 let mut call = format!("{helper}(material.{texture_field}, {}", parts[2]);
                 for arg in parts.iter().skip(3) {
@@ -402,6 +512,43 @@ fn graph(material: GpuMaterial, uv: vec2<f32>) -> vec4<f32> {
         assert!(fixed.contains(
             "pulsar_graph_sample_grad(material.tex_roughness, uv, vec2<f32>(1.0), vec2<f32>(1.0))"
         ));
+    }
+
+    /// A compute stage's lowering: the evaluator reads at the stage's
+    /// gradients through each slot's transform, a graph's own samples at
+    /// the UV gradients, specular anti-aliasing's normal derivatives are the
+    /// stage's, and any other derivative is zero; no implicit derivative is
+    /// left, in either binding mode.
+    #[test]
+    fn explicit_gradients_leave_no_implicit_derivative() {
+        use super::explicit_gradients;
+        let source = r#"
+fn sample_texture(slot: MaterialTextureSlot, uv: vec2<f32>, fallback: vec4<f32>) -> vec4<f32> {
+    return textureSample(scene_textures[slot.texture_index], scene_sampler, uv);
+}
+fn aa(n: vec3<f32>) -> f32 { return length(dpdx(n)) + length(dpdy(n)); }
+fn graph(material: GpuMaterial, uv: vec2<f32>) -> f32 {
+    let a = textureSample(scene_textures[material.tex_base_color], scene_sampler, uv * 2.0);
+    return a.x + fwidth(uv.x) + dpdxFine(uv.y);
+}
+"#;
+        let bindless = explicit_gradients(source, 4, true);
+        assert!(bindless.contains("textureSampleGrad(scene_textures[slot.texture_index], scene_sampler, uv, material_slot_gradient(slot, material_duv_dx), material_slot_gradient(slot, material_duv_dy))"));
+        assert!(bindless.contains("length(material_dn_dx) + length(material_dn_dy)"));
+        assert!(bindless.contains("textureSampleGrad(scene_textures[material.tex_base_color], scene_sampler, uv * 2.0, material_duv_dx, material_duv_dy)"));
+        assert!(bindless.contains("((uv.x) - (uv.x))"));
+        assert!(bindless.contains("((uv.y) - (uv.y))"));
+        let expanded = explicit_gradients(&apply_webgpu_material_bindings(source, 2), 2, false);
+        for text in [&bindless, &expanded] {
+            for implicit in ["textureSample(", "dpdx", "dpdy", "fwidth"] {
+                assert!(
+                    !text.contains(implicit),
+                    "{implicit} left:
+{text}"
+                );
+            }
+        }
+        assert!(expanded.contains("textureSampleGrad(scene_texture_1, scene_sampler, uv, material_slot_gradient(slot, material_duv_dx), material_slot_gradient(slot, material_duv_dy))"));
     }
 
     #[test]

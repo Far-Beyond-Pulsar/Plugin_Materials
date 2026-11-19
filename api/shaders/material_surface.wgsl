@@ -25,6 +25,14 @@
 //   `scene_sampler`, the one sampler every texture is read through, then
 //   `scene_textures`, a binding array of N 2D textures, at the next binding
 //   (`MaterialBindingConfig::append_layout_entries`).
+//
+// Textures are read with implicit derivatives (`textureSample`), as a
+// fragment stage reads them. A compute stage (a visibility buffer's shade, a
+// ray hit's surface) has none: it lowers its composed program with
+// `helio_mats::shader::explicit_gradients`, which reads every texture with
+// the gradients it sets (`//!use material_gradients`: the footprint of its
+// pixel or its ray cone, `material_duv_dx` / `_dy`, and the geometric
+// normal's turn across it, `material_dn_dx` / `_dy`).
 
 // A material texture's slot in the table and its UV transform.
 struct MaterialTextureSlot {
@@ -120,6 +128,15 @@ fn resolve_specular_f0(
 
 // ── Default PBR material evaluation ──────────────────────────────────────────
 
+// The surface a diffuse consumer needs and nothing else (the ray streams'
+// `SurfaceDetail::Diffuse`): base colour and emission at the point, the
+// geometric (vertex) normal, roughness and metalness as the material's
+// constants; no normal, ORM, occlusion or specular textures, no specular
+// anti-aliasing. A pipeline constant: a program compiled once is two
+// pipelines, and the compiler drops what the diffuse one does not read.
+// Drawers leave it false (the whole material).
+override MATERIAL_SURFACE_DIFFUSE: bool = false;
+
 fn default_pbr_surface(material: GpuMaterial, material_tex: MaterialTextureData, input: MaterialInput) -> SurfaceData {
     let uv = input.tex_coords;
     let base_sample = sample_texture(material_tex.base_color, uv, vec4<f32>(1.0));
@@ -127,6 +144,15 @@ fn default_pbr_surface(material: GpuMaterial, material_tex: MaterialTextureData,
     let alpha = albedo.a;
 
     let N_geom = normalize(input.world_normal);
+
+    if MATERIAL_SURFACE_DIFFUSE {
+        let emissive_sample = sample_texture(material_tex.emissive, uv, vec4<f32>(1.0));
+        let metallic = select(0.0, clamp(material.roughness_metallic.y, 0.0, 1.0), material.workflow == MATERIAL_WORKFLOW_METALLIC);
+        return SurfaceData(albedo, N_geom, 1.0, clamp(material.roughness_metallic.x, 0.045, 1.0), metallic,
+                           clamp(mix(vec3<f32>(0.04), albedo.rgb, metallic), vec3<f32>(0.0), vec3<f32>(0.999)),
+                           material.emissive.rgb * material.emissive.w * emissive_sample.rgb, alpha,
+                           0u, vec3<f32>(0.0), 0.0, 0.0, 0.0, 0.0);
+    }
 
     var N: vec3<f32>;
     // The normal map's mean normal length (1: no spread, or no map).

@@ -104,6 +104,19 @@ fn material_transmission(material: GpuMaterial) -> f32 {
     return select(0.0, clamp(material.class_params.x, 0.0, 1.0), material.material_class == MATERIAL_CLASS_FOLIAGE);
 }
 
+// What a thin two-sided surface of `material` whose colour at a point is
+// `albedo` lets through of the light behind it, by colour: its transmission
+// share of its colour (`surface_with_transmission`'s `through`, the frame's
+// `SurfaceData::subsurface_color` with `SURFACE_FLAG_TWO_SIDED`). What
+// leaves the back of a leaf lit from the front is the light it transmits,
+// not its reflectance: a leaf that reflected its full colour from both
+// sides would give off up to twice what reaches it. The raster's drawers
+// and a tracer's hit both describe the leaf with this, so a G-buffer texel
+// and a hit hold one transmission.
+fn material_transmitted(material: GpuMaterial, albedo: vec3<f32>) -> vec3<f32> {
+    return albedo * material_transmission(material);
+}
+
 // The light a thin sheet of `material` lets through (tinted glass, by
 // Beer-Lambert): its base colour is the transmittance of a reference sheet,
 // its alpha the sheet's optical thickness (alpha 0.5 transmits the colour,
