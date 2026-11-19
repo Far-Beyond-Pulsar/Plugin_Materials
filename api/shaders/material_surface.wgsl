@@ -1,7 +1,7 @@
 // Material evaluation in WGSL (helio-mats `MATERIAL_SURFACE_SNIPPET`,
 // `//!use material_surface`): what a drawer of any kind calls to shade a
 // point of its surface with a material. Use it with `//!use material_row`,
-// `//!use specular_aa`, `//!use pbr_eval` and `//!use frame_surface` (the
+// `//!use specular_aa` and `//!use frame_surface` (the
 // frame's `SurfaceData` and its `SURFACE_FLAG_*`,
 // `helio_frame_api::gbuffer::SURFACE_SNIPPET`).
 //

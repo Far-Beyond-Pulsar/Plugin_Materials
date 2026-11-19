@@ -223,7 +223,6 @@ fn overlapping_asset_names_are_not_replaced_inside_each_other() {
 /// into it (`RadiantTemplate::compose`), as into every drawer's.
 const PROBE: &str = r#"
 enable wgpu_binding_array;
-//!use pbr_eval
 //!use material_row
 //!use specular_aa
 //!use material_surface

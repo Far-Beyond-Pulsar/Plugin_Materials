@@ -40,8 +40,9 @@ pub struct MaterialsFeature;
 pub const SURFACE_PROBE_MARKER: &str = "//!use materials_surface_probe";
 
 /// The materials' surface for the shading-cost view's test patch: the
-/// default PBR's BRDF through `pbr_eval`, the reflected radiance per unit
-/// light.
+/// default PBR surface lit through the frame's BSDF (`bsdf_eval`), the
+/// reflected radiance per unit light. With the frame's `frame_surface` and
+/// `frame_bsdf` snippets.
 pub const SURFACE_PROBE: helio_core::shader::ShaderSnippet =
     helio_core::wgsl_snippet!(SURFACE_PROBE_MARKER, "../shaders/surface_probe.wgsl");
 
