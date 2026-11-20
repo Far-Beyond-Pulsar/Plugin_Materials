@@ -1,9 +1,10 @@
 //! The shading-cost probe's test patch: the materials' surface
-//! (`surface_probe`, the default PBR through `pbr_eval`) lit by `num_lights`
+//! (`surface_probe`, the default PBR through the frame's BSDF) lit by `num_lights`
 //! synthetic point lights, drawn once per profiled configuration and timed
 //! by the pass (`cost.rs`).
 //!use materials_surface_probe
-//!use pbr_eval
+//!use frame_surface
+//!use frame_bsdf
 
 struct PatchParams {
     roughness: f32,

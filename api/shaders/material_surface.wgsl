@@ -1,14 +1,16 @@
 // Material evaluation in WGSL (helio-mats `MATERIAL_SURFACE_SNIPPET`,
 // `//!use material_surface`): what a drawer of any kind calls to shade a
 // point of its surface with a material. Use it with `//!use material_row`,
-// `//!use specular_aa` and `//!use pbr_eval` (the `SURFACE_FLAG_*` a
-// surface's `flags` carries to the lighting).
+// `//!use specular_aa` and `//!use frame_surface` (the
+// frame's `SurfaceData` and its `SURFACE_FLAG_*`,
+// `helio_frame_api::gbuffer::SURFACE_SNIPPET`).
 //
 // The drawer hands the material a `MaterialInput` (`material_row`'s: the
 // point as a material sees it: where it is, its frame, its texture
 // coordinate, the view and the frame),
-// and gets a `SurfaceData` back, which it writes to the G-buffer (or
-// lights, forward). Templates (`radiant_eval_surface`, a material class's
+// and gets the frame's `SurfaceData` back, which it writes to the G-buffer
+// (`gbuffer_output`), packs into a ray's hit (`scene_surface_pack`) or
+// lights (forward). Templates (`radiant_eval_surface`, a material class's
 // shading) and material graphs read only `MaterialInput`'s fields and the
 // frame clock (`radiant_graph_time`, which a drawer whose `Globals` carries
 // `time` supplies), so a material shades the same on a mesh, a terrain or a
@@ -23,6 +25,14 @@
 //   `scene_sampler`, the one sampler every texture is read through, then
 //   `scene_textures`, a binding array of N 2D textures, at the next binding
 //   (`MaterialBindingConfig::append_layout_entries`).
+//
+// Textures are read with implicit derivatives (`textureSample`), as a
+// fragment stage reads them. A compute stage (a visibility buffer's shade, a
+// ray hit's surface) has none: it lowers its composed program with
+// `helio_mats::shader::explicit_gradients`, which reads every texture with
+// the gradients it sets (`//!use material_gradients`: the footprint of its
+// pixel or its ray cone, `material_duv_dx` / `_dy`, and the geometric
+// normal's turn across it, `material_dn_dx` / `_dy`).
 
 // A material texture's slot in the table and its UV transform.
 struct MaterialTextureSlot {
@@ -45,24 +55,6 @@ struct MaterialTextureData {
     specular_color:     MaterialTextureSlot,
     specular_weight:    MaterialTextureSlot,
     params:             vec4<f32>,  // x=normal_scale, y=occlusion_strength, z=alpha_cutoff
-}
-
-// What a material makes of a point: what the drawer writes.
-struct SurfaceData {
-    albedo:              vec4<f32>,
-    normal:              vec3<f32>,
-    ao:                  f32,
-    roughness:           f32,
-    metallic:            f32,
-    specular_f0:         vec3<f32>,
-    emissive:            vec3<f32>,
-    alpha:               f32,
-    flags:               u32,
-    subsurface_color:    vec3<f32>,
-    subsurface_radius:   f32,
-    roughness_aniso_x:   f32,
-    roughness_aniso_y:   f32,
-    aniso_rotation:      f32,
 }
 
 // Material `id`'s row, or the stand-in where the table holds none (a
@@ -136,6 +128,15 @@ fn resolve_specular_f0(
 
 // ── Default PBR material evaluation ──────────────────────────────────────────
 
+// The surface a diffuse consumer needs and nothing else (the ray streams'
+// `SurfaceDetail::Diffuse`): base colour and emission at the point, the
+// geometric (vertex) normal, roughness and metalness as the material's
+// constants; no normal, ORM, occlusion or specular textures, no specular
+// anti-aliasing. A pipeline constant: a program compiled once is two
+// pipelines, and the compiler drops what the diffuse one does not read.
+// Drawers leave it false (the whole material).
+override MATERIAL_SURFACE_DIFFUSE: bool = false;
+
 fn default_pbr_surface(material: GpuMaterial, material_tex: MaterialTextureData, input: MaterialInput) -> SurfaceData {
     let uv = input.tex_coords;
     let base_sample = sample_texture(material_tex.base_color, uv, vec4<f32>(1.0));
@@ -143,6 +144,15 @@ fn default_pbr_surface(material: GpuMaterial, material_tex: MaterialTextureData,
     let alpha = albedo.a;
 
     let N_geom = normalize(input.world_normal);
+
+    if MATERIAL_SURFACE_DIFFUSE {
+        let emissive_sample = sample_texture(material_tex.emissive, uv, vec4<f32>(1.0));
+        let metallic = select(0.0, clamp(material.roughness_metallic.y, 0.0, 1.0), material.workflow == MATERIAL_WORKFLOW_METALLIC);
+        return SurfaceData(albedo, N_geom, 1.0, clamp(material.roughness_metallic.x, 0.045, 1.0), metallic,
+                           clamp(mix(vec3<f32>(0.04), albedo.rgb, metallic), vec3<f32>(0.0), vec3<f32>(0.999)),
+                           material.emissive.rgb * material.emissive.w * emissive_sample.rgb, alpha,
+                           0u, vec3<f32>(0.0), 0.0, 0.0, 0.0, 0.0);
+    }
 
     var N: vec3<f32>;
     // The normal map's mean normal length (1: no spread, or no map).

@@ -20,6 +20,9 @@ instances = ["host-rows"]
 
 [dependencies]
 helio-core = { workspace = true }
+# `SurfaceData`, the frame's surface at a lit point, which a material makes
+# (`helio_frame_api::gbuffer::SURFACE_SNIPPET`).
+helio-frame-api = { workspace = true }
 pulsar_scenedb = { workspace = true }
 wgpu = { workspace = true }
 bytemuck = { workspace = true, features = ["derive"] }

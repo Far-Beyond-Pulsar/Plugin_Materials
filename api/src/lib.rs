@@ -46,8 +46,8 @@ pub use radiant::{
 pub use row::{MaterialRow, MATERIALS};
 pub use shader::{
     apply_webgpu_decal_bindings, apply_webgpu_material_bindings, MATERIAL_ROW_SNIPPET,
-    MATERIAL_SNIPPETS, MATERIAL_SURFACE_SNIPPET, PBR_EVAL, PBR_EVAL_SNIPPET, PBR_MARKER,
-    SPECULAR_AA, SPECULAR_AA_MARKER, SPECULAR_AA_SNIPPET,
+    MATERIAL_SNIPPETS, MATERIAL_SURFACE_SNIPPET, SPECULAR_AA, SPECULAR_AA_MARKER,
+    SPECULAR_AA_SNIPPET,
 };
 pub use table::{MaterialStandIn, MaterialTextureTable, MATERIAL_TEXTURE_DATA_WORDS};
 pub use texture::{TextureSamplerDesc, TextureTransform, TextureUpload};

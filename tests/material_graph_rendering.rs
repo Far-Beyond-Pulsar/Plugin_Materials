@@ -151,10 +151,7 @@ fn every_texture_sampling_variant_reads_the_material_sampler() {
             .insert("texture".into(), serde_json::json!("test.png"));
         graph.nodes.insert("texture".into(), texture);
         let source = adapted(&graph, 1);
-        assert!(
-            source.contains(", scene_sampler,"),
-            "{kind}: {source}"
-        );
+        assert!(source.contains(", scene_sampler,"), "{kind}: {source}");
         assert!(!source.contains("texture_sampler"), "{kind}: {source}");
     }
 }
@@ -223,10 +220,10 @@ fn overlapping_asset_names_are_not_replaced_inside_each_other() {
 /// into it (`RadiantTemplate::compose`), as into every drawer's.
 const PROBE: &str = r#"
 enable wgpu_binding_array;
-//!use pbr_eval
 //!use material_row
 //!use specular_aa
 //!use material_surface
+//!use frame_surface
 
 @group(1) @binding(0) var<storage, read> materials: array<GpuMaterial>;
 @group(1) @binding(1) var<storage, read> material_textures: array<MaterialTextureData>;
