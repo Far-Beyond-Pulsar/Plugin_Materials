@@ -151,10 +151,7 @@ fn every_texture_sampling_variant_reads_the_material_sampler() {
             .insert("texture".into(), serde_json::json!("test.png"));
         graph.nodes.insert("texture".into(), texture);
         let source = adapted(&graph, 1);
-        assert!(
-            source.contains(", scene_sampler,"),
-            "{kind}: {source}"
-        );
+        assert!(source.contains(", scene_sampler,"), "{kind}: {source}");
         assert!(!source.contains("texture_sampler"), "{kind}: {source}");
     }
 }
