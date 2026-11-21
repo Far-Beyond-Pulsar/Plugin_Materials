@@ -51,6 +51,8 @@ pub struct GraphMaterial {
     pub reads_time: bool,
     /// What drives the graph's cut-out coverage (`crate::graph::opacity_mask`).
     mask: crate::graph::GraphMask,
+    /// The graph's authored constant opacity (`crate::graph::constant_opacity`).
+    opacity: Option<f32>,
 }
 
 /// Slot-independent compiled source plus the scene-local residency slots it
@@ -78,6 +80,13 @@ impl MaterialAsset for LoadedMaterial {
                 // cutoff: its mask texture is ordinal 0, the row's base colour.
                 if let crate::graph::GraphMask::TextureAlpha(_) = graph.mask {
                     row.flags |= helio_mats::FLAG_ALPHA_TEST;
+                }
+                // A graph that authors an opacity below 1 is glass: blended,
+                // transparent-only, at that alpha (the transparent drawer
+                // reads the row's alpha, it does not run the graph).
+                if let Some(opacity) = graph.opacity.filter(|opacity| *opacity < 1.0) {
+                    row.base_color[3] *= opacity;
+                    row.flags |= helio_mats::FLAG_ALPHA_BLEND | helio_mats::FLAG_TRANSPARENT_ONLY;
                 }
                 Ok(ResolvedMaterial {
                     row,
@@ -210,6 +219,7 @@ fn load_graph(source: &str, bytes: &[u8]) -> Result<GraphMaterial, String> {
     }
     Ok(GraphMaterial {
         mask,
+        opacity: crate::graph::constant_opacity(&graph),
         reads_time: snippet.contains("radiant_graph_time()"),
         graph,
         textures,

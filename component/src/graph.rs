@@ -95,6 +95,27 @@ pub fn opacity_mask(graph: &psgc::GraphDescription) -> GraphMask {
     }
 }
 
+/// The constant `opacity` a graph authors on its output (a default on the
+/// unconnected pin, number or text), `None` when the pin is connected (the
+/// value is per pixel, which the transparent drawer cannot evaluate) or
+/// unset. Below 1 the material is translucent: its row takes the blended,
+/// transparent-only path with this alpha ([`crate::assets`]).
+pub fn constant_opacity(graph: &psgc::GraphDescription) -> Option<f32> {
+    let output = graph.nodes.values().find(|n| n.node_type == "fragment_output")?;
+    if graph
+        .connections
+        .iter()
+        .any(|c| c.target_node == output.id && c.target_pin == "opacity")
+    {
+        return None;
+    }
+    let value = output.properties.get("opacity")?;
+    let opacity = value
+        .as_f64()
+        .or_else(|| value.as_str().and_then(|text| text.trim().parse().ok()))?;
+    Some((opacity as f32).clamp(0.0, 1.0))
+}
+
 /// The image file a graph's texture asset names: a texture reference
 /// (`TextureRef`, the asset's id) through the project's file index, else a
 /// path, relative to `project_root`. The one place a graph's textures
@@ -552,5 +573,46 @@ mod usage_tests {
         node(&mut graph, "tex", "sample_texture", Some("albedo.png"));
         connect(&mut graph, "tex", "out", "base_color");
         assert_eq!(opacity_mask(&graph), GraphMask::None);
+    }
+}
+
+#[cfg(test)]
+mod opacity_tests {
+    use super::*;
+    use psgc::{Connection, ConnectionType, GraphDescription, NodeInstance, Position};
+
+    fn graph_with_output(opacity: Option<serde_json::Value>) -> GraphDescription {
+        let mut graph = GraphDescription::new("opacity");
+        let mut output = NodeInstance::new("out", "fragment_output", Position { x: 0.0, y: 0.0 });
+        if let Some(value) = opacity {
+            output.properties.insert("opacity".into(), value);
+        }
+        graph.add_node(output);
+        graph
+    }
+
+    #[test]
+    fn a_constant_opacity_is_read_as_a_number_or_text_and_clamped() {
+        assert_eq!(constant_opacity(&graph_with_output(None)), None);
+        assert_eq!(
+            constant_opacity(&graph_with_output(Some(serde_json::json!(0.25)))),
+            Some(0.25)
+        );
+        assert_eq!(
+            constant_opacity(&graph_with_output(Some(serde_json::json!(" 0.5 ")))),
+            Some(0.5)
+        );
+        assert_eq!(
+            constant_opacity(&graph_with_output(Some(serde_json::json!(3.0)))),
+            Some(1.0)
+        );
+    }
+
+    #[test]
+    fn a_connected_opacity_has_no_constant() {
+        let mut graph = graph_with_output(Some(serde_json::json!(0.25)));
+        graph.add_node(NodeInstance::new("src", "frag_uv", Position { x: 0.0, y: 0.0 }));
+        graph.add_connection(Connection::new("src", "result", "out", "opacity", ConnectionType::Data));
+        assert_eq!(constant_opacity(&graph), None);
     }
 }
