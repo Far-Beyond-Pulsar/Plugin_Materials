@@ -18,6 +18,7 @@
 
 pub mod assets;
 pub mod graph;
+pub mod graph_nodes;
 pub mod graph_preview;
 pub mod preview_program;
 pub mod sampler;

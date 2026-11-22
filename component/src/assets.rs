@@ -76,10 +76,21 @@ impl MaterialAsset for LoadedMaterial {
                 let mirror = mirror.ok_or("a material graph draws only in a scene")?;
                 let (hash, texture_slots) = compiled_graph(id, version, graph, mirror)?;
                 let mut row = fallback.row(texture_slots);
+                let mut texture_data = None;
                 // A texture-masked graph cuts out in every pass at the same
                 // cutoff: its mask texture is ordinal 0, the row's base colour.
-                if let crate::graph::GraphMask::TextureAlpha(_) = graph.mask {
+                if let crate::graph::GraphMask::TextureAlpha { transform, .. } = &graph.mask {
                     row.flags |= helio_mats::FLAG_ALPHA_TEST;
+                    // Sampled through a UV transform: the passes that cut out
+                    // without running the graph (`material_cut_out`) read the
+                    // base colour slot through the row's texture data.
+                    if *transform != helio_mats::TextureTransform::IDENTITY {
+                        let mut data = helio_mats::MaterialTextureData::derived(&row);
+                        data.base_color =
+                            helio_mats::MaterialTextureSlot::new(row.tex_base_color, 0, transform);
+                        row.flags |= helio_mats::FLAG_TEXTURE_DATA;
+                        texture_data = Some(data);
+                    }
                 }
                 // A graph that authors an opacity below 1 is glass: blended,
                 // transparent-only, at that alpha (the transparent drawer
@@ -92,6 +103,7 @@ impl MaterialAsset for LoadedMaterial {
                     row,
                     material_class: helio_mats::MATERIAL_CLASS_CUSTOM,
                     graph_hash: hash,
+                    texture_data,
                 })
             }
         }

@@ -85,6 +85,39 @@ test (`vg_alpha.wgsl`, spliced into modules that do not resolve
 `material_row`) keeps its own `vga_uv`; `tests/texture_transform.rs` holds
 both WGSL forms to `TextureTransform::apply` on the GPU.
 
+### In material graphs
+
+A material graph applies the same transform with the `texture_transform`
+node (`materials_component::graph_nodes`, which the materials add to PSGC's
+node catalogue): inputs `uv`, `offset`, `scale` (default 1) and `rotation`
+(radians), WGSL `material_uv_transform` itself, so a graph and a row read a
+transformed texture alike. The editor's import companion writes one for each
+distinct `KHR_texture_transform` of an imported model's images, between
+`frag_uv` and the samples, so the transform is saved in the `.material` and
+editable there (a normal map's tangent frame keeps the mesh UV, as the rows'
+vertex tangents do). A graph reads UV set 0 only (`MaterialInput::tex_coords`):
+a slot on another set is read from set 0, with a warning at import.
+
+- **Gradients.** The graph compiler chains a transformed sample's gradients
+  through the transforms' linear parts
+  (`helio_mats::shader::uv_transform_gradients`): a `textureSampleGrad` at
+  `material_uv_transform_linear` of UV0's gradients. In a fragment stage that
+  equals the implicit derivatives; in a stage without them
+  (`explicit_gradients`: the visibility-buffer shade, a ray's hit) a texture
+  tiled 15 times reads its own mip instead of one 15 times too sharp.
+- **Masks.** A graph whose `opacity_mask` is a texture's alpha read through
+  one texture transform of constant inputs is still a texture-alpha mask
+  (`graph::GraphMask::TextureAlpha { texture, transform }`): its resolved
+  material carries a `MaterialTextureData` row whose base colour slot has the
+  transform (`ResolvedMaterial::texture_data`, written beside the row by the
+  material instances), so the depth, shadow and virtual-geometry passes cut
+  out where the graph does. A wired transform input is per pixel and makes
+  the mask `Other` (not cut out).
+
+`tests/material_graph_rendering.rs` renders the node through the real
+template and both bindings against `TextureTransform::apply`, and checks the
+chained gradients of the lowering.
+
 ## Building and testing
 
 Like [Plugin_Physics](https://github.com/Far-Beyond-Pulsar/Plugin_Physics), this plugin's crates are members

@@ -401,11 +401,24 @@ fn instance_dispatch(mirror: &GpuMirrorHandle, row: u32, data: *const (), is_new
         },
         is_new_insert,
     );
+    // The texture data the row reads (`FLAG_TEXTURE_DATA`). Without the
+    // flag the shaders never read this row, so a stale one is harmless.
+    if let Some(data) = &resolved.texture_data {
+        pulsar_scenedb::gpu::write_derived_row(
+            mirror,
+            row,
+            &crate::host_rows::MaterialTexturesComponent::from(*data),
+            is_new_insert,
+        );
+    }
 }
 
 fn instance_clear(mirror: &GpuMirrorHandle, row: u32) {
     pulsar_scenedb::gpu::clear_derived_row::<MaterialComponent>(mirror, row);
     pulsar_scenedb::gpu::clear_derived_row::<MaterialKeyComponent>(mirror, row);
+    pulsar_scenedb::gpu::clear_derived_row::<crate::host_rows::MaterialTexturesComponent>(
+        mirror, row,
+    );
 }
 
 pulsar_scenedb::pulsar_reflection::inventory::submit! {

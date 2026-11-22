@@ -44,11 +44,24 @@ pub fn text_to_value(text: &str) -> Option<Value> {
     }
 }
 
-/// A node default from a definition: numbers and booleans are stored as such.
+/// A node default from a definition or a field: numbers, booleans and
+/// vectors (`[x, y]`, an array of numbers, which PSGC lowers to a WGSL
+/// vector) are stored as such.
 fn default_value(text: &str) -> Value {
     let text = text.trim();
+    let vector = text
+        .starts_with('[')
+        .then(|| serde_json::from_str::<Value>(text).ok())
+        .flatten()
+        .filter(|value| {
+            value
+                .as_array()
+                .is_some_and(|items| items.iter().all(Value::is_number))
+        });
     if let Ok(number) = text.parse::<f64>() {
         serde_json::json!(number)
+    } else if let Some(vector) = vector {
+        vector
     } else if let Ok(boolean) = text.parse::<bool>() {
         serde_json::json!(boolean)
     } else {

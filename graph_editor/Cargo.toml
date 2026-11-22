@@ -31,6 +31,9 @@ engine_fs = { workspace = true }
 psgc = { workspace = true }
 # The materials' one compiler and preview program.
 materials_component = { workspace = true }
+# A texture slot's UV transform (`TextureTransform`), which the import
+# companion writes into the graphs it builds.
+helio-mats = { workspace = true }
 wgsl_std = { path = "../../../../crates/third-party/psgc/crates/wgsl_std" }
 
 uuid = { workspace = true }
