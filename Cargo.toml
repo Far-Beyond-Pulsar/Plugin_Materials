@@ -7,6 +7,9 @@ description = "Materials (`pulsar.materials`): the plugin's root crate, the one 
 autoexamples = false
 
 [features]
+# The plugin as a library of its own, loaded by the editor from plugins/editor:
+# cargo build -p <this package> --release --features dll
+dll = ["editor", "plugin_editor_api/editor", "plugin_editor_api/shared-dylibs"]
 # The editor's registration (the material graph editor's provider) and the
 # crates it needs. A game links the root without it, so it takes no editor
 # dependency.
@@ -57,3 +60,7 @@ helio-feature-api = { workspace = true }
 
 [lints]
 workspace = true
+
+# Also the plugin as a library of its own (feature `dll`, loaded by the editor).
+[lib]
+crate-type = ["cdylib", "rlib"]
