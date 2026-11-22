@@ -2,8 +2,9 @@
 //! drawer binds when no materials plugin publishes one ([`MaterialStandIn`]).
 //!
 //! A table holds one view per slot (a white texture where a slot is empty),
-//! the one material sampler every slot is read through and the per-material
-//! texture metadata; its
+//! the one material sampler every slot is read through and the materials'
+//! texture data rows ([`crate::MATERIAL_TEXTURE_DATA`], the scene's; one
+//! zero row without them); its
 //! [`MaterialTextureBindings`] are what every drawer binds
 //! (`MaterialBindingConfig::append_bind_group_entries`). The materials'
 //! feature (`helio-pass-materials`) keeps one in step with the scene's
@@ -13,7 +14,8 @@ use crate::{MaterialBindingConfig, MaterialRow, MaterialSampler, MaterialTexture
 
 /// Words of one `MaterialTextureData` row (seven 48-byte slots and a 16-byte
 /// parameter vector, `material_surface.wgsl`).
-pub const MATERIAL_TEXTURE_DATA_WORDS: usize = 88;
+pub const MATERIAL_TEXTURE_DATA_WORDS: usize =
+    std::mem::size_of::<crate::MaterialTextureData>() / 4;
 
 /// A material texture table: one view per slot, its sampler and metadata.
 pub struct MaterialTextureTable {
@@ -23,9 +25,13 @@ pub struct MaterialTextureTable {
     fallback_view: Box<wgpu::TextureView>,
     /// The one sampler every slot is read through (`scene_sampler`).
     sampler: wgpu::Sampler,
-    /// The `MaterialTextureData` sentinel (`params.w = -1`): shaders derive
-    /// a material's texture slots from its row (`tex_*`, identity UVs).
-    metadata: wgpu::Buffer,
+    /// One zero `MaterialTextureData` row: what the table binds where the
+    /// scene keeps no texture data rows (no material reads it: only a row
+    /// with `FLAG_TEXTURE_DATA` does, and such a row has its data).
+    empty_texture_data: wgpu::Buffer,
+    /// The scene's texture data rows and their buffer's epoch
+    /// ([`Self::set_texture_data`]).
+    texture_data: Option<(wgpu::Buffer, u64)>,
     /// One entry per slot; never resized, so the views' addresses are
     /// stable until an entry is replaced (then `view_refs` is rebuilt).
     slots: Vec<Option<(wgpu::Texture, wgpu::TextureView)>>,
@@ -71,18 +77,19 @@ impl MaterialTextureTable {
                 ..Default::default()
             },
         ));
-        let mut sentinel = [0u32; MATERIAL_TEXTURE_DATA_WORDS];
-        sentinel[MATERIAL_TEXTURE_DATA_WORDS - 1] = (-1.0f32).to_bits();
-        let metadata = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Material Texture Metadata"),
-            contents: bytemuck::cast_slice(&sentinel),
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        let empty_texture_data = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Material Texture Data (none)"),
+            contents: bytemuck::bytes_of(
+                &<crate::MaterialTextureData as bytemuck::Zeroable>::zeroed(),
+            ),
+            usage: wgpu::BufferUsages::STORAGE,
         });
         let mut table = Self {
             _fallback_texture: fallback_texture,
             fallback_view,
             sampler,
-            metadata,
+            empty_texture_data,
+            texture_data: None,
             slots: vec![None; binding.max_textures],
             view_refs: Vec::with_capacity(binding.max_textures),
             version: 0,
@@ -138,10 +145,32 @@ impl MaterialTextureTable {
         Ok(true)
     }
 
+    /// Binds `rows` (the scene's [`crate::MATERIAL_TEXTURE_DATA`] buffer and
+    /// its epoch, which moves when the buffer is reallocated; `None`: the
+    /// scene keeps none) as the materials' texture data. Returns whether the
+    /// binding changed (the bindings' version then moves). New contents of
+    /// the same buffer change nothing: drawers read it every frame.
+    pub fn set_texture_data(&mut self, rows: Option<(&wgpu::Buffer, u64)>) -> bool {
+        let same = match (&self.texture_data, rows) {
+            (None, None) => true,
+            (Some((buffer, epoch)), Some((new, new_epoch))) => buffer == new && *epoch == new_epoch,
+            _ => false,
+        };
+        if same {
+            return false;
+        }
+        self.texture_data = rows.map(|(buffer, epoch)| (buffer.clone(), epoch));
+        self.version = self.version.wrapping_add(1);
+        true
+    }
+
     /// The table as drawers bind it.
     pub fn bindings(&self) -> MaterialTextureBindings<'_> {
         MaterialTextureBindings {
-            material_textures: &self.metadata,
+            material_textures: self
+                .texture_data
+                .as_ref()
+                .map_or(&self.empty_texture_data, |(buffer, _)| buffer),
             texture_views: &self.view_refs,
             sampler: &self.sampler,
             version: self.version,

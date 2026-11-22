@@ -53,3 +53,45 @@ impl From<MaterialComponent> for crate::GpuMaterial {
         crate::MaterialRow::from(value).into()
     }
 }
+
+/// A material's texture data row ([`crate::MaterialTextureData`]: its texture
+/// slots, their UV transforms, normal scale, occlusion strength and alpha
+/// cutoff) as a SceneDB component, at its entity's row of the packed
+/// `"material_texture_data"` buffer, beside that entity's
+/// [`MaterialComponent`]. The row is read only while the material row
+/// carries [`crate::FLAG_TEXTURE_DATA`] ([`material_rows`] writes both).
+/// Registered with the material instances' columns
+/// (`crate::instance::register_columns`); a host that registers its own
+/// columns registers it with `register_gpu_columns_growable`.
+#[derive(SceneStore, bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+#[gpu(layout = packed, buffer = "material_texture_data")]
+pub struct MaterialTexturesComponent {
+    #[gpu]
+    pub base_color: crate::MaterialTextureSlot,
+    #[gpu]
+    pub normal: crate::MaterialTextureSlot,
+    #[gpu]
+    pub roughness_metallic: crate::MaterialTextureSlot,
+    #[gpu]
+    pub emissive: crate::MaterialTextureSlot,
+    #[gpu]
+    pub occlusion: crate::MaterialTextureSlot,
+    #[gpu]
+    pub specular_color: crate::MaterialTextureSlot,
+    #[gpu]
+    pub specular_weight: crate::MaterialTextureSlot,
+    #[gpu]
+    pub params: [f32; 4],
+}
+same_layout!(MaterialTexturesComponent, crate::MaterialTextureData, crate::MATERIAL_TEXTURE_DATA, "material_texture_data"; base_color, normal, roughness_metallic, emissive, occlusion, specular_color, specular_weight, params);
+
+/// The two components a host authors for a material with texture data:
+/// `row` bound to `data` ([`crate::MaterialTextureData::bind`]) and `data`
+/// itself. Insert both on the material's entity.
+pub fn material_rows(
+    row: crate::GpuMaterial,
+    data: &crate::MaterialTextureData,
+) -> (MaterialComponent, MaterialTexturesComponent) {
+    (data.bind(row).into(), (*data).into())
+}

@@ -185,7 +185,9 @@ pub struct MaterialKeyComponent {
     pub live: u32,
 }
 
-/// Register the instances' columns with a GPU mirror (initial capacities;
+/// Register the instances' columns, and the texture data rows hosts author
+/// beside material rows (`host_rows::MaterialTexturesComponent`), with a GPU
+/// mirror (initial capacities;
 /// they grow). Whoever acquires instances registers them; registering twice
 /// is harmless.
 pub fn register_columns(
@@ -194,6 +196,7 @@ pub fn register_columns(
 ) {
     MaterialComponent::register_gpu_columns_growable(store, 256, device);
     MaterialKeyComponent::register_gpu_columns_growable(store, 256, device);
+    crate::host_rows::MaterialTexturesComponent::register_gpu_columns_growable(store, 256, device);
 }
 
 // ── The world's instances ─────────────────────────────────────────────────

@@ -5,9 +5,10 @@
 //     alpha = material.base_color.a * sample(base_color slot).a
 //     discard when alpha < cutoff        (and when alpha <= 0.001)
 //
-// including the explicit metadata table / single-row fallback rule of
-// `material_texture_data` (row 0 `params.w == -1` selects the GpuMaterial
-// texture ids with identity UVs and cutoff 0.5).
+// including the texture data rule of `material_texture_data`: a row with
+// FLAG_TEXTURE_DATA reads its `MaterialTextureData` row (slot, UV transform,
+// cutoff); any other takes its GpuMaterial texture id with identity UVs and
+// cutoff 0.5 when alpha-tested.
 //
 // The includer declares (see `helio_mats::vg_alpha::bindings_wgsl`):
 //   vga_materials          array<u32>   GpuMaterial rows, 24 words each
@@ -23,6 +24,7 @@ const VGA_TEX_WORDS: u32 = 88u;
 const VGA_NO_TEXTURE: u32 = 0xffffffffu;
 const VGA_FLAG_DOUBLE_SIDED: u32 = 1u;
 const VGA_FLAG_ALPHA_TEST: u32 = 4u;
+const VGA_FLAG_TEXTURE_DATA: u32 = 1024u;
 
 struct VgaAlpha {
     // Material flags (0 for a missing row: treated as opaque).
@@ -52,7 +54,7 @@ fn vga_load(material_id: u32) -> VgaAlpha {
     a.flags = vga_materials[m + 18u];
     a.factor = bitcast<f32>(vga_materials[m + 3u]);
     let rows = arrayLength(&vga_material_textures) / VGA_TEX_WORDS;
-    if rows > 0u && material_id < rows && bitcast<f32>(vga_material_textures[VGA_TEX_WORDS - 1u]) != -1.0 {
+    if (a.flags & VGA_FLAG_TEXTURE_DATA) != 0u && material_id < rows {
         let t = material_id * VGA_TEX_WORDS;
         a.tex = vga_material_textures[t];
         a.offset_scale = vec4<f32>(
@@ -77,12 +79,15 @@ fn vga_double_sided(a: VgaAlpha) -> bool {
     return (a.flags & VGA_FLAG_DOUBLE_SIDED) != 0u;
 }
 
-// `select_uv` of the classic evaluator.
+// `select_uv` of the classic evaluator: `material_uv_transform`
+// (`material_row.wgsl`, `helio_mats::TextureTransform`), which this module's
+// includers do not resolve; the materials' `texture_transform` test holds
+// the two to the same result.
 fn vga_uv(a: VgaAlpha, uv: vec2<f32>) -> vec2<f32> {
     let scaled = uv * a.offset_scale.zw;
     let s = a.rotation.x;
     let c = a.rotation.y;
-    return vec2<f32>(scaled.x * c - scaled.y * s, scaled.x * s + scaled.y * c) + a.offset_scale.xy;
+    return vec2<f32>(c * scaled.x + s * scaled.y, -s * scaled.x + c * scaled.y) + a.offset_scale.xy;
 }
 
 // The linear part of `vga_uv` (for derivatives).
@@ -90,7 +95,7 @@ fn vga_uv_linear(a: VgaAlpha, d: vec2<f32>) -> vec2<f32> {
     let scaled = d * a.offset_scale.zw;
     let s = a.rotation.x;
     let c = a.rotation.y;
-    return vec2<f32>(scaled.x * c - scaled.y * s, scaled.x * s + scaled.y * c);
+    return vec2<f32>(c * scaled.x + s * scaled.y, -s * scaled.x + c * scaled.y);
 }
 
 // Alpha with screen-space derivatives of the (untransformed) uv.

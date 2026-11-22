@@ -44,8 +44,8 @@ struct MaterialTextureSlot {
     rotation:      vec4<f32>,
 }
 
-// Per-material texture metadata: seven 48-byte slots and 16-byte parameters
-// (`helio_pass_materials::MATERIAL_TEXTURE_DATA_WORDS`).
+// A material's texture slots and parameters (`helio_mats::MaterialTextureData`):
+// seven 48-byte slots and 16-byte parameters, 88 words.
 struct MaterialTextureData {
     base_color:         MaterialTextureSlot,
     normal:             MaterialTextureSlot,
@@ -66,17 +66,10 @@ fn material_at(id: u32) -> GpuMaterial {
     return material_stand_in();
 }
 
-/// Select UV channel and apply texture transform
+// A texture slot's UV: UV set 0 (`MaterialInput` carries one) through the
+// slot's transform (`material_uv_transform`).
 fn select_uv(slot: MaterialTextureSlot, base_uv: vec2<f32>) -> vec2<f32> {
-    // TODO: support uv_channel when we have tex_coords1
-    let scaled = base_uv * slot.offset_scale.zw;
-    let s = slot.rotation.x;
-    let c = slot.rotation.y;
-    let rotated = vec2<f32>(
-        scaled.x * c - scaled.y * s,
-        scaled.x * s + scaled.y * c,
-    );
-    return rotated + slot.offset_scale.xy;
+    return material_uv_transform(slot.offset_scale, slot.rotation, base_uv);
 }
 
 /// Sample texture from bindless array, or return fallback if MATERIAL_NO_TEXTURE
@@ -88,16 +81,17 @@ fn sample_texture(slot: MaterialTextureSlot, base_uv: vec2<f32>, fallback: vec4<
     return textureSample(scene_textures[slot.texture_index], scene_sampler, uv);
 }
 
-// Basic SceneDB materials carry texture-store indices directly. An explicit
-// metadata table can still supply transformed UVs and extension textures.
+// A row's `tex_*` slot with identity UVs.
 fn material_slot(index: u32) -> MaterialTextureSlot {
     return MaterialTextureSlot(index,0u,0u,0u,vec4<f32>(0.0,0.0,1.0,1.0),vec4<f32>(0.0,1.0,0.0,0.0));
 }
 
-// Material `id`'s texture slots: its metadata row, or (the table's sentinel,
-// `params.w = -1`) its row's `tex_*` slots with identity UVs.
+// Material `id`'s texture slots: its `MaterialTextureData` row
+// (`helio_mats::MATERIAL_TEXTURE_DATA`) when the row says it has one
+// (`MATERIAL_FLAG_TEXTURE_DATA`), else its row's `tex_*` slots with identity
+// UVs (`helio_mats::MaterialTextureData::derived`).
 fn material_texture_data(material: GpuMaterial, id: u32) -> MaterialTextureData {
-    if material_textures[0].params.w!=-1.0 && id<arrayLength(&material_textures) { return material_textures[id]; }
+    if (material.flags & MATERIAL_FLAG_TEXTURE_DATA) != 0u && id < arrayLength(&material_textures) { return material_textures[id]; }
     return MaterialTextureData(material_slot(material.tex_base_color),material_slot(material.tex_normal),
         material_slot(material.tex_roughness),material_slot(material.tex_emissive),material_slot(material.tex_occlusion),
         material_slot(MATERIAL_NO_TEXTURE),material_slot(MATERIAL_NO_TEXTURE),vec4<f32>(1.0,1.0,select(0.0,0.5,(material.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u),0.0));

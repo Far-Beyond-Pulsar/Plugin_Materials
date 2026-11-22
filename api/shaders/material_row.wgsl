@@ -70,6 +70,8 @@ const MATERIAL_FLAG_HAS_ANISOTROPY: u32 = 64u;
 const MATERIAL_FLAG_HAS_CUSTOM_SHADER: u32 = 128u;
 const MATERIAL_FLAG_TRANSPARENT_ONLY: u32 = 256u;
 const MATERIAL_FLAG_FORWARD_SHADING: u32 = 512u;
+// The row's texture slots are its `MaterialTextureData` row (`material_surface`).
+const MATERIAL_FLAG_TEXTURE_DATA: u32 = 1024u;
 
 // `helio_mats::MATERIAL_CLASS_*`.
 const MATERIAL_CLASS_DEFAULT: u32 = 0u;
@@ -127,4 +129,20 @@ fn material_sheet_transmittance(material: GpuMaterial) -> vec3<f32> {
     let c = clamp(material.base_color.rgb, vec3<f32>(0.02), vec3<f32>(1.0));
     let a = clamp(material.base_color.a, 0.0, 1.0);
     return pow(c, vec3<f32>(2.0 * a));
+}
+
+// A texture slot's UV transform (`helio_mats::TextureTransform`, glTF's
+// `KHR_texture_transform`): the texture is sampled at
+// offset + R(rotation) * (scale * uv), R(t)(u, v) = (cos t u + sin t v,
+// -sin t u + cos t v), the UV origin at the image's top-left.
+// `offset_scale` is offset.xy, scale.zw; `rotation` its sine (x) and cosine (y).
+fn material_uv_transform_linear(offset_scale: vec4<f32>, rotation: vec4<f32>, d: vec2<f32>) -> vec2<f32> {
+    let scaled = d * offset_scale.zw;
+    let s = rotation.x;
+    let c = rotation.y;
+    return vec2<f32>(c * scaled.x + s * scaled.y, -s * scaled.x + c * scaled.y);
+}
+
+fn material_uv_transform(offset_scale: vec4<f32>, rotation: vec4<f32>, uv: vec2<f32>) -> vec2<f32> {
+    return material_uv_transform_linear(offset_scale, rotation, uv) + offset_scale.xy;
 }

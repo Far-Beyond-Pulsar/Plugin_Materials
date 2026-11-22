@@ -35,9 +35,9 @@ pub use material::{
     MaterialWorkflow, BINDLESS_MATERIAL_FEATURES, FIRST_CUSTOM_MATERIAL_CLASS, FLAG_ALPHA_BLEND,
     FLAG_ALPHA_TEST, FLAG_DOUBLE_SIDED, FLAG_FORWARD_SHADING, FLAG_HAS_ANISOTROPY,
     FLAG_HAS_CLEAR_COAT, FLAG_HAS_CUSTOM_SHADER, FLAG_HAS_NORMAL_MAP, FLAG_HAS_SUBSURFACE,
-    FLAG_TRANSPARENT_ONLY, MATERIAL_CLASS_ANISOTROPIC, MATERIAL_CLASS_CLEAR_COAT,
-    MATERIAL_CLASS_CUSTOM, MATERIAL_CLASS_DEFAULT, MATERIAL_CLASS_FOLIAGE, MATERIAL_CLASS_SKIN,
-    MATERIAL_CLASS_SUBSURFACE, MAX_MATERIAL_TEXTURES,
+    FLAG_TEXTURE_DATA, FLAG_TRANSPARENT_ONLY, MATERIAL_CLASS_ANISOTROPIC,
+    MATERIAL_CLASS_CLEAR_COAT, MATERIAL_CLASS_CUSTOM, MATERIAL_CLASS_DEFAULT,
+    MATERIAL_CLASS_FOLIAGE, MATERIAL_CLASS_SKIN, MATERIAL_CLASS_SUBSURFACE, MAX_MATERIAL_TEXTURES,
 };
 pub use radiant::{
     graph_source, register_graph_source, RadiantGraphRegistry, RadiantShaderCache,
@@ -50,7 +50,10 @@ pub use shader::{
     SPECULAR_AA_SNIPPET,
 };
 pub use table::{MaterialStandIn, MaterialTextureTable, MATERIAL_TEXTURE_DATA_WORDS};
-pub use texture::{TextureSamplerDesc, TextureTransform, TextureUpload};
+pub use texture::{
+    MaterialTextureData, MaterialTextureSlot, TextureSamplerDesc, TextureTransform, TextureUpload,
+    MATERIAL_TEXTURE_DATA,
+};
 
 /// The material templates surfaces compile from (a renderer config's
 /// `features`): the opaque registry the G-buffer drawer reads and the

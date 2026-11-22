@@ -43,6 +43,7 @@ pulsar_world_registry = { workspace = true }
 psgc = { workspace = true }
 wgpu = { workspace = true }
 pollster = "=0.4.0"
+bytemuck = { workspace = true }
 image = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

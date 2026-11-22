@@ -58,6 +58,33 @@ and a hit's share. A reader that must not resolve an instance (a ray-traced
 scene's projection) reads its mirrored row and key with
 `instance::resolved_row` / `resolved_key`.
 
+## Texture slots and their UV transforms
+
+A material row (`MaterialRow`, `"materials"`) names its textures by table
+slot (`tex_*`). A material that needs more (a UV transform per slot, the
+specular textures, normal scale, occlusion strength, an alpha cutoff) also
+has a `MaterialTextureData` row at the same row index of
+`MATERIAL_TEXTURE_DATA` (`"material_texture_data"`, the SceneDB component
+`host_rows::MaterialTexturesComponent`) and sets `FLAG_TEXTURE_DATA` on its
+row; without the flag the shaders derive the slots from `tex_*` with
+identity UVs (`MaterialTextureData::derived`), so a row reused by another
+material never reads a stale data row. A host writes both with
+`host_rows::material_rows` (an imported material: `ConvertedMaterial::rows`
+in the meshes' asset-compat). The feature binds the SceneDB column as the
+table's `material_textures`, rebinding only when SceneDB reallocates it.
+
+The transform is glTF's `KHR_texture_transform` (`TextureTransform`): the
+texture is sampled at `offset + R(rotation) * (scale * uv)`,
+`R(θ)(u, v) = (cos θ u + sin θ v, -sin θ u + cos θ v)`, the UV origin at the
+image's top-left. `TextureTransform::apply` is the CPU form (the snapshot
+renderer samples through it); `material_uv_transform` and
+`material_uv_transform_linear` (`//!use material_row`) the shaders' form,
+which `select_uv` and `material_slot_gradient` use in every drawer, the
+visibility-buffer shade and a ray hit's surface. The virtual-geometry alpha
+test (`vg_alpha.wgsl`, spliced into modules that do not resolve
+`material_row`) keeps its own `vga_uv`; `tests/texture_transform.rs` holds
+both WGSL forms to `TextureTransform::apply` on the GPU.
+
 ## Building and testing
 
 Like [Plugin_Physics](https://github.com/Far-Beyond-Pulsar/Plugin_Physics), this plugin's crates are members

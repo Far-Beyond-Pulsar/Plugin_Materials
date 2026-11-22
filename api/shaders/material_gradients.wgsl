@@ -21,10 +21,7 @@ var<private> material_dn_dx: vec3<f32>;
 var<private> material_dn_dy: vec3<f32>;
 
 // `d` (a UV0 gradient) through slot `slot`'s UV transform: its scale and
-// rotation (`select_uv`'s linear part; the offset drops out).
+// rotation (`material_uv_transform_linear`; the offset drops out).
 fn material_slot_gradient(slot: MaterialTextureSlot, d: vec2<f32>) -> vec2<f32> {
-    let scaled = d * slot.offset_scale.zw;
-    let s = slot.rotation.x;
-    let c = slot.rotation.y;
-    return vec2<f32>(scaled.x * c - scaled.y * s, scaled.x * s + scaled.y * c);
+    return material_uv_transform_linear(slot.offset_scale, slot.rotation, d);
 }
