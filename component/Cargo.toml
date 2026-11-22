@@ -30,8 +30,13 @@ helio-pass-materials = { workspace = true }
 # are core).
 helio_component = { workspace = true }
 pulsar_scenedb = { workspace = true }
-# The material graph compiler.
+# The material graph compiler, and the nodes the materials add to its
+# catalogue (`graph_nodes`: `wgsl_std::SHADER_REGISTRY`, a `linkme` slice of
+# `graphy` node metadata).
 psgc = { workspace = true }
+graphy = { workspace = true }
+wgsl_std = { path = "../../../../crates/third-party/psgc/crates/wgsl_std" }
+linkme = { workspace = true }
 serde_json = { workspace = true }
 
 [lints]

@@ -9,7 +9,7 @@
 //!   compiles a graph for a preview without a scene.
 //! - The materials' Helio feature (`helio-pass-materials`: the material
 //!   texture table every kind's drawers bind, [`render_features`]) and its
-//!   sampler, from the project's texture streaming settings
+//!   sampler, from the project's `texture_sampling` settings
 //!   ([`configure_renderer`], [`sampler`]).
 //!
 //! This crate registers nothing itself: the plugin's root crate
@@ -18,6 +18,7 @@
 
 pub mod assets;
 pub mod graph;
+pub mod graph_nodes;
 pub mod graph_preview;
 pub mod preview_program;
 pub mod sampler;
@@ -27,7 +28,7 @@ pub fn render_features() -> helio_feature_api::FeatureSet {
     helio_feature_api::FeatureSet::new().with(helio_pass_materials::MaterialsFeature)
 }
 
-/// The material sampler from the project's `streaming.texture_*` settings:
+/// The material sampler from the project's `texture_sampling` settings:
 /// scene materials read through trilinear, anisotropic, repeating filtering,
 /// not wgpu's nearest/clamp default.
 pub fn configure_renderer(config: helio::RendererConfig) -> helio::RendererConfig {

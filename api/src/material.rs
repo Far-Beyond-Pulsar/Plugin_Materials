@@ -161,6 +161,12 @@ pub const FLAG_HAS_ANISOTROPY: u32 = 1 << 6;
 pub const FLAG_HAS_CUSTOM_SHADER: u32 = 1 << 7;
 pub const FLAG_TRANSPARENT_ONLY: u32 = 1 << 8;
 pub const FLAG_FORWARD_SHADING: u32 = 1 << 9;
+/// The material's texture slots, UV transforms and texture parameters are
+/// its [`crate::MaterialTextureData`] row (same row index, under
+/// [`crate::MATERIAL_TEXTURE_DATA`]). Without it the shaders derive them
+/// from the row's `tex_*` slots with identity UVs, so a row written by
+/// someone who authors no texture data never reads a stale one.
+pub const FLAG_TEXTURE_DATA: u32 = 1 << 10;
 
 /// Material class shader archetypes.
 pub const MATERIAL_CLASS_DEFAULT: u32 = 0;
@@ -233,12 +239,13 @@ impl GpuMaterial {
     pub const NO_TEXTURE: u32 = u32::MAX;
 }
 
-/// Borrowed material-texture state for passes that sample Helio's texture table.
-/// The G-buffer's single-row fallback reserves metadata `params.w = -1` to
-/// select texture-store IDs directly from `GpuMaterial`, with identity UVs.
-/// Explicit metadata tables must not use that reserved marker.
+/// Borrowed material-texture state for passes that sample the material
+/// texture table.
 #[derive(Clone, Copy)]
 pub struct MaterialTextureBindings<'a> {
+    /// The materials' [`crate::MaterialTextureData`] rows
+    /// ([`crate::MATERIAL_TEXTURE_DATA`]; one zero row where the scene keeps
+    /// none), read for a material with [`FLAG_TEXTURE_DATA`].
     pub material_textures: &'a wgpu::Buffer,
     pub texture_views: &'a [&'a wgpu::TextureView],
     /// The one sampler every texture is read through (`scene_sampler`).

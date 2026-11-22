@@ -201,7 +201,15 @@ impl NodeDefinitions {
                 documentation: description,
                 inputs,
                 outputs,
-                properties: HashMap::new(),
+                // Inputs whose identity is not their type's zero (a texture
+                // transform's unit scale): a placed node starts there.
+                properties: materials_component::graph_nodes::input_defaults(&node_meta.name)
+                    .iter()
+                    .map(|(pin, value)| {
+                        let value = materials_component::graph_nodes::default_value(value);
+                        (pin.to_string(), value.to_string())
+                    })
+                    .collect(),
                 color: Some(Self::get_category_color(&category)),
                 is_event,
             };

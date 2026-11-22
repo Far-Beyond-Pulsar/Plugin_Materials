@@ -144,14 +144,19 @@ impl From<SurfaceValues> for SurfaceMaterialDocument {
     }
 }
 
-/// A material as one draw uses it: its row, its shading class and, for a
-/// compiled graph, the graph's registered source
-/// ([`crate::register_graph_source`]; 0 for none).
+/// A material as one draw uses it: its row, its shading class, for a
+/// compiled graph the graph's registered source
+/// ([`crate::register_graph_source`]; 0 for none), and the texture data
+/// ([`crate::MaterialTextureData`]) its row reads when it carries
+/// [`crate::FLAG_TEXTURE_DATA`]. Whoever writes the row writes the data
+/// beside it, at the same row index of [`crate::MATERIAL_TEXTURE_DATA`].
 #[derive(Clone, Copy, Debug)]
 pub struct ResolvedMaterial {
     pub row: GpuMaterial,
     pub material_class: u32,
     pub graph_hash: u64,
+    /// `Some` exactly when `row` carries [`crate::FLAG_TEXTURE_DATA`].
+    pub texture_data: Option<crate::MaterialTextureData>,
 }
 
 impl ResolvedMaterial {
@@ -161,6 +166,7 @@ impl ResolvedMaterial {
             row: surface.row([GpuMaterial::NO_TEXTURE; 5]),
             material_class: crate::MATERIAL_CLASS_DEFAULT,
             graph_hash: 0,
+            texture_data: None,
         }
     }
 }

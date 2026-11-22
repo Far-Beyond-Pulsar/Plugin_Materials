@@ -86,6 +86,10 @@ pub fn explicit_gradients(src: &str, max_textures: usize, bindless: bool) -> Str
     let mut out = src
         .replace("dpdx(n)", "material_dn_dx")
         .replace("dpdy(n)", "material_dn_dy")
+        // UV0's own gradients: what a graph chains its UV transforms'
+        // gradients from ([`uv_transform_gradients`]).
+        .replace("dpdx(input.tex_coords)", "material_duv_dx")
+        .replace("dpdy(input.tex_coords)", "material_duv_dy")
         // The expanded binding's graph helper (`pulsar_graph_sample`).
         .replace("let dx = dpdx(uv);", "let dx = material_duv_dx;")
         .replace("let dy = dpdy(uv);", "let dy = material_duv_dy;");
@@ -129,6 +133,85 @@ pub fn explicit_gradients(src: &str, max_textures: usize, bindless: bool) -> Str
         });
     }
     out
+}
+
+/// `source` (a function body of `let` bindings, one per line, as a material
+/// graph compiles to) with each texture read at a UV that a chain of
+/// `material_uv_transform` bindings derives from `uv` read at that chain's
+/// gradients: `uv`'s gradients `duv` (two expressions) through each
+/// transform's linear part (`material_uv_transform_linear`; the offset drops
+/// out). The transform is affine, so this is its exact chain rule: in a
+/// fragment stage the same as the implicit derivatives, and in a stage
+/// without them ([`explicit_gradients`], with `duv` UV0's
+/// `dpdx(input.tex_coords)` / `dpdy`) a texture scaled 15 times still reads
+/// the mip its footprint covers, rather than one 15 times too sharp.
+///
+/// A sample at any other UV expression is left as it is.
+pub fn uv_transform_gradients(source: &str, uv: &str, duv: [&str; 2]) -> String {
+    const TRANSFORM: &str = "material_uv_transform(";
+    // Bindings of the UV itself (a `frag_uv` node).
+    let mut aliases = std::collections::HashSet::from([uv.to_owned()]);
+    // Bindings a transform chain derives from the UV -> their gradients.
+    let mut transformed: std::collections::HashMap<String, [String; 2]> = Default::default();
+    let mut out = String::with_capacity(source.len());
+    for line in source.lines() {
+        out.push_str(line);
+        out.push('\n');
+        let trimmed = line.trim_start();
+        let Some((name, expression)) = trimmed
+            .strip_prefix("let ")
+            .and_then(|rest| rest.split_once(" = "))
+            .and_then(|(name, value)| Some((name.trim(), value.trim().strip_suffix(';')?)))
+        else {
+            continue;
+        };
+        if aliases.contains(strip_outer_parentheses(expression)) {
+            aliases.insert(name.to_owned());
+            continue;
+        }
+        let Some(args) = expression
+            .starts_with(TRANSFORM)
+            .then(|| call_arguments(expression, TRANSFORM.len() - 1))
+            .flatten()
+            .filter(|(end, _)| *end == expression.len())
+            .map(|(_, args)| args)
+        else {
+            continue;
+        };
+        let [offset_scale, rotation, input] = split_wgsl_arguments(args)[..] else {
+            continue;
+        };
+        let input = strip_outer_parentheses(input);
+        let input_gradients = if aliases.contains(input) {
+            duv.map(str::to_owned)
+        } else if let Some(gradients) = transformed.get(input) {
+            gradients.clone()
+        } else {
+            // A UV this chain cannot differentiate: left to the stage.
+            continue;
+        };
+        let indent = &line[..line.len() - trimmed.len()];
+        let names = ["dx", "dy"].map(|axis| format!("{name}_d{axis}"));
+        for (gradient, d) in names.iter().zip(&input_gradients) {
+            out.push_str(&format!(
+                "{indent}let {gradient} = material_uv_transform_linear({offset_scale}, {rotation}, {d});\n"
+            ));
+        }
+        transformed.insert(name.to_owned(), names);
+    }
+    if transformed.is_empty() {
+        return source.to_owned();
+    }
+    rewrite_calls(&out, "textureSample(", |args| {
+        let [texture, sampler, at] = args else {
+            return None;
+        };
+        let at = strip_outer_parentheses(at);
+        let [dx, dy] = transformed.get(at)?;
+        Some(format!(
+            "textureSampleGrad({texture}, {sampler}, {at}, {dx}, {dy})"
+        ))
+    })
 }
 
 /// `source` with every call `name(args)` (`name` ends in `(`, and is not
@@ -553,5 +636,49 @@ fn sample_decal_texture(texture_index: u32, uv: vec2<f32>) -> vec4<f32> {
             "case 1u: { return textureSampleLevel(scene_texture_1, scene_sampler, uv, 0.0); }"
         ));
         assert!(fixed.contains("default: { return vec4<f32>(1.0); }"));
+    }
+
+    /// A sample at a UV two texture transforms derive from the mesh UV reads
+    /// at the chained gradients; a sample at the mesh UV, or at a UV the
+    /// chain cannot differentiate, is left to the stage.
+    #[test]
+    fn transformed_samples_read_at_chained_gradients() {
+        let source = "\
+    let a = uv;
+    let t = material_uv_transform(vec4<f32>((vec2<f32>(0.0, 0.0)), (vec2<f32>(2.0, 2.0))), vec4<f32>(sin((0.0)), cos((0.0)), 0.0, 0.0), (a));
+    let s = material_uv_transform(vec4<f32>((vec2<f32>(0.5, 0.0)), (vec2<f32>(1.0, 1.0))), vec4<f32>(sin((0.3)), cos((0.3)), 0.0, 0.0), (t));
+    let w = material_uv_transform(vec4<f32>((vec2<f32>(0.5, 0.0)), (vec2<f32>(1.0, 1.0))), vec4<f32>(sin((0.3)), cos((0.3)), 0.0, 0.0), (a * 2.0));
+    let x = textureSample(scene_textures[material.tex_base_color], scene_sampler, (s));
+    let y = textureSample(scene_textures[material.tex_normal], scene_sampler, (a));
+    let z = textureSample(scene_textures[material.tex_roughness], scene_sampler, (w));
+";
+        let out = super::uv_transform_gradients(source, "uv", ["DX", "DY"]);
+        assert!(out.contains("let t_ddx = material_uv_transform_linear(vec4<f32>((vec2<f32>(0.0, 0.0)), (vec2<f32>(2.0, 2.0))), vec4<f32>(sin((0.0)), cos((0.0)), 0.0, 0.0), DX);"), "{out}");
+        assert!(out.contains("let s_ddy = material_uv_transform_linear(vec4<f32>((vec2<f32>(0.5, 0.0)), (vec2<f32>(1.0, 1.0))), vec4<f32>(sin((0.3)), cos((0.3)), 0.0, 0.0), t_ddy);"), "{out}");
+        assert!(out.contains(
+            "textureSampleGrad(scene_textures[material.tex_base_color], scene_sampler, s, s_ddx, s_ddy)"
+        ), "{out}");
+        assert!(
+            out.contains("textureSample(scene_textures[material.tex_normal], scene_sampler, (a))"),
+            "{out}"
+        );
+        assert!(!out.contains("w_ddx"), "{out}");
+        assert!(
+            out.contains(
+                "textureSample(scene_textures[material.tex_roughness], scene_sampler, (w))"
+            ),
+            "{out}"
+        );
+
+        // Without a transform the source is untouched.
+        let plain = "    let y = textureSample(t, s, (uv));\n";
+        assert_eq!(
+            super::uv_transform_gradients(plain, "uv", ["DX", "DY"]),
+            plain
+        );
+
+        // `explicit_gradients` reads UV0's own gradients as the stage's.
+        let lowered = super::explicit_gradients("let g = dpdx(input.tex_coords);", 1, true);
+        assert_eq!(lowered, "let g = material_duv_dx;");
     }
 }

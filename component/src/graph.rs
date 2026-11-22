@@ -41,7 +41,7 @@ pub fn texture_assets(graph: &psgc::GraphDescription) -> Result<Vec<String>, Str
     let mut assets: Vec<String> = assets.into_iter().collect();
     // A texture-alpha mask takes ordinal 0, the row's base colour slot: the
     // depth and shadow passes cut out with it (`material_cut_out`).
-    if let GraphMask::TextureAlpha(mask) = opacity_mask(graph) {
+    if let GraphMask::TextureAlpha { texture: mask, .. } = opacity_mask(graph) {
         if let Some(at) = assets.iter().position(|asset| *asset == mask) {
             let mask = assets.remove(at);
             assets.insert(0, mask);
@@ -52,15 +52,35 @@ pub fn texture_assets(graph: &psgc::GraphDescription) -> Result<Vec<String>, Str
 
 /// What drives a graph's `opacity_mask` (its cut-out coverage), as the passes
 /// that cut out without running the graph see it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GraphMask {
     /// Not connected: the material is not masked.
     None,
-    /// The alpha of this texture sampled at the mesh UV: the material row
-    /// cuts out with it in every pass (`FLAG_ALPHA_TEST`, ordinal 0).
-    TextureAlpha(String),
+    /// The alpha of `texture` sampled at the mesh UV through `transform`
+    /// (identity unless a constant texture transform node feeds the
+    /// sample): the material row cuts out with it in every pass
+    /// (`FLAG_ALPHA_TEST`, ordinal 0, the slot's transform in the row's
+    /// texture data, which `material_cut_out` samples through).
+    TextureAlpha {
+        texture: String,
+        transform: helio_mats::TextureTransform,
+    },
     /// Any other expression: only a pass running the graph could evaluate it.
     Other,
+}
+
+/// Whether `node` is the mesh UV (UV set 0): a UV input node, or a texture
+/// coordinate node reading set 0.
+fn is_mesh_uv(node: &psgc::NodeInstance) -> bool {
+    match node.node_type.as_str() {
+        "frag_uv" | "vertex_uv" => true,
+        "texture_coordinate" => node
+            .properties
+            .get("index")
+            .and_then(crate::graph_nodes::numbers)
+            .is_none_or(|index| index.first().is_none_or(|index| *index == 0.0)),
+        _ => false,
+    }
 }
 
 /// How `graph`'s output drives `opacity_mask`.
@@ -78,19 +98,37 @@ pub fn opacity_mask(graph: &psgc::GraphDescription) -> GraphMask {
     let Some(mask) = source_of(&output.id, "opacity_mask") else {
         return GraphMask::None;
     };
-    let texture = (mask.node_type == "component_a")
+    let Some(sample) = (mask.node_type == "component_a")
         .then(|| source_of(&mask.id, "vec"))
         .flatten()
         .filter(|sample| sample.node_type == "sample_texture")
-        // Sampled at the mesh UV: the pin unconnected or fed by the UV.
-        .filter(|sample| {
-            source_of(&sample.id, "uv").is_none_or(|uv| {
-                matches!(uv.node_type.as_str(), "frag_uv" | "texture_coordinate" | "vertex_uv")
-            })
-        })
-        .and_then(|sample| sample.properties.get("texture").and_then(serde_json::Value::as_str));
-    match texture {
-        Some(asset) if !asset.trim().is_empty() => GraphMask::TextureAlpha(asset.to_string()),
+    else {
+        return GraphMask::Other;
+    };
+    // Sampled at the mesh UV (the pin unconnected or fed by the UV), or at
+    // the mesh UV through one texture transform of constant inputs.
+    let transform = match source_of(&sample.id, "uv") {
+        None => Some(helio_mats::TextureTransform::IDENTITY),
+        Some(uv) if is_mesh_uv(uv) => Some(helio_mats::TextureTransform::IDENTITY),
+        Some(node) if node.node_type == crate::graph_nodes::TEXTURE_TRANSFORM => {
+            let wired = |pin: &str| source_of(&node.id, pin).is_some();
+            let from_mesh_uv = source_of(&node.id, "uv").is_some_and(is_mesh_uv);
+            (from_mesh_uv && !wired("offset") && !wired("scale") && !wired("rotation"))
+                .then(|| crate::graph_nodes::texture_transform_of(node))
+                .flatten()
+        }
+        Some(_) => None,
+    };
+    let texture = sample
+        .properties
+        .get("texture")
+        .and_then(serde_json::Value::as_str)
+        .filter(|asset| !asset.trim().is_empty());
+    match (texture, transform) {
+        (Some(texture), Some(transform)) => GraphMask::TextureAlpha {
+            texture: texture.to_string(),
+            transform,
+        },
         _ => GraphMask::Other,
     }
 }
@@ -232,11 +270,27 @@ pub fn texture_uses(
 /// and booleans typed as text (what the graph editor's fields and older files
 /// store) become numbers and booleans, and a blank default of an input pin is
 /// dropped so the pin falls back to the shader type's default (serialized as
-/// `""` it would reach the WGSL as a string literal). The one normalization
-/// every compile of a graph goes through.
+/// `""` it would reach the WGSL as a string literal), and an input a node
+/// declares a default for ([`crate::graph_nodes::input_defaults`], a texture
+/// transform's unit scale) takes it where the graph stores none. The one
+/// normalization every compile of a graph goes through.
 pub fn prepare(graph: &psgc::GraphDescription) -> psgc::GraphDescription {
     let mut prepared = graph.clone();
     for node in prepared.nodes.values_mut() {
+        for (pin, value) in crate::graph_nodes::input_defaults(&node.node_type) {
+            let stored = node
+                .properties
+                .get(*pin)
+                .is_some_and(|stored| match stored {
+                    serde_json::Value::Null => false,
+                    serde_json::Value::String(text) => !text.trim().is_empty(),
+                    _ => true,
+                });
+            if !stored {
+                node.properties
+                    .insert((*pin).to_string(), crate::graph_nodes::default_value(value));
+            }
+        }
         let inputs: Vec<String> = node.inputs.iter().map(|pin| pin.id.clone()).collect();
         let keys: Vec<String> = node.properties.keys().cloned().collect();
         for key in keys {
@@ -263,11 +317,27 @@ fn property_to_psgc_value(value: &str, is_input_property: bool) -> Option<serde_
     }
     Some(if let Ok(number) = value.parse::<f64>() {
         serde_json::json!(number)
+    } else if let Some(vector) = number_array(value) {
+        vector
     } else if let Ok(boolean) = value.parse::<bool>() {
         serde_json::json!(boolean)
     } else {
         serde_json::json!(value)
     })
+}
+
+/// A vector default typed as text, `[x, y]`: the array of numbers PSGC
+/// lowers to a WGSL vector.
+fn number_array(value: &str) -> Option<serde_json::Value> {
+    if !value.starts_with('[') {
+        return None;
+    }
+    let parsed: serde_json::Value = serde_json::from_str(value).ok()?;
+    parsed
+        .as_array()?
+        .iter()
+        .all(serde_json::Value::is_number)
+        .then_some(parsed)
 }
 
 /// Bind graph textures through `GpuMaterial` fields before code generation.
@@ -329,8 +399,15 @@ pub const GRAPH_TEXTURE_FIELDS: [&str; 5] = [
     "tex_occlusion",
 ];
 
+/// UV0's gradients in the graph function, which a texture transform chain's
+/// gradients start from ([`helio_mats::shader::uv_transform_gradients`]).
+const GRAPH_DUV: [&str; 2] = ["material_graph_duv_dx", "material_graph_duv_dy"];
+
 fn adapt_graph_wgsl(generated: &str) -> Result<String, String> {
-    let mut source = generated.to_string();
+    // A sample through texture transforms reads at the transforms' chained
+    // gradients, so a stage without derivatives reads it at its own mip.
+    let mut source = helio_mats::shader::uv_transform_gradients(generated, "uv", GRAPH_DUV);
+    let chains_gradients = source.contains(GRAPH_DUV[0]);
     bind_graph_texture_samplers(&mut source);
     if let Some(start) = source.find("struct Uniforms {") {
         let end = source[start..]
@@ -355,12 +432,21 @@ fn adapt_graph_wgsl(generated: &str) -> Result<String, String> {
         .find('{')
         .map(|offset| entry + offset)
         .ok_or_else(|| "malformed PSGC fragment entry point".to_string())?;
-    let replacement = "fn pulsar_material_graph(material: GpuMaterial, input: MaterialInput) -> PulsarGraphOutput {\n    let frag_coord = input.clip_position;\n    let uv = input.tex_coords;\n    let normal = input.world_normal;\n    let world_pos = input.world_position;";
+    let mut replacement = String::from(
+        "fn pulsar_material_graph(material: GpuMaterial, input: MaterialInput) -> PulsarGraphOutput {\n    let frag_coord = input.clip_position;\n    let uv = input.tex_coords;\n    let normal = input.world_normal;\n    let world_pos = input.world_position;",
+    );
+    if chains_gradients {
+        // `explicit_gradients` reads these as `material_duv_dx` / `_dy`.
+        replacement.push_str(&format!(
+            "\n    let {} = dpdx(input.tex_coords);\n    let {} = dpdy(input.tex_coords);",
+            GRAPH_DUV[0], GRAPH_DUV[1]
+        ));
+    }
     source = source.replace(
         "pulsar_material_graph(input)",
         "pulsar_material_graph(material, input)",
     );
-    source.replace_range(entry..=open, replacement);
+    source.replace_range(entry..=open, &replacement);
 
     let body = r#"let graph_surface = pulsar_material_graph(material, input);
 albedo = graph_surface.base_color;
@@ -530,7 +616,8 @@ mod usage_tests {
         match uv_through {
             Some(kind) => {
                 node(&mut graph, "warp", kind, None);
-                connect(&mut graph, "uv", "warp", "a");
+                let pin = if kind == crate::graph_nodes::TEXTURE_TRANSFORM { "uv" } else { "a" };
+                connect(&mut graph, "uv", "warp", pin);
                 connect(&mut graph, "warp", "leaf", "uv");
             }
             None => connect(&mut graph, "uv", "leaf", "uv"),
@@ -547,13 +634,46 @@ mod usage_tests {
         let graph = foliage(None);
         assert_eq!(
             opacity_mask(&graph),
-            GraphMask::TextureAlpha("z_leaf.png".into())
+            GraphMask::TextureAlpha {
+                texture: "z_leaf.png".into(),
+                transform: helio_mats::TextureTransform::IDENTITY,
+            }
         );
         assert_eq!(
             texture_assets(&graph).unwrap(),
             vec!["z_leaf.png".to_string(), "a_normal.png".to_string()],
             "the mask texture is the row's base colour slot, which the depth passes cut out with"
         );
+    }
+
+    /// A mask read through a texture transform of constant inputs is still
+    /// the texture's alpha, with the transform the cut-out passes sample
+    /// through; an input left unset takes the node's identity default.
+    #[test]
+    fn a_mask_through_a_constant_texture_transform_carries_the_transform() {
+        let mut graph = foliage(Some(crate::graph_nodes::TEXTURE_TRANSFORM));
+        let warp = graph.nodes.get_mut("warp").unwrap();
+        warp.properties
+            .insert("offset".into(), serde_json::json!([0.0, -2.4]));
+        warp.properties
+            .insert("scale".into(), serde_json::json!("[15, 3.4]"));
+        assert_eq!(
+            opacity_mask(&graph),
+            GraphMask::TextureAlpha {
+                texture: "z_leaf.png".into(),
+                transform: helio_mats::TextureTransform {
+                    offset: [0.0, -2.4],
+                    scale: [15.0, 3.4],
+                    rotation_radians: 0.0,
+                },
+            }
+        );
+        assert_eq!(texture_assets(&graph).unwrap()[0], "z_leaf.png");
+
+        // A wired input is per pixel: the cut-out passes cannot evaluate it.
+        node(&mut graph, "spin", "time", None);
+        connect(&mut graph, "spin", "warp", "rotation");
+        assert_eq!(opacity_mask(&graph), GraphMask::Other);
     }
 
     #[test]

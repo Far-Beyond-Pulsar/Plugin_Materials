@@ -710,3 +710,149 @@ fn a_normal_map_renders_unit_world_space_normals_on_the_gpu() {
         "a non-flat texel must bend the normal away from the geometric one: {left:?}"
     );
 }
+
+/// `uv -> texture_transform -> ...`: the node the import companion writes
+/// for a glTF `KHR_texture_transform` slot, its inputs as a `.material`
+/// stores them (`rotation` left unset: the node's default, 0).
+fn transformed_uv(
+    graph: &mut GraphDescription,
+    offset: [f64; 2],
+    scale: [f64; 2],
+    rotation: Option<f64>,
+) {
+    graph.add_node(node("uv", "frag_uv"));
+    let mut transform = node(
+        "transform",
+        materials_component::graph_nodes::TEXTURE_TRANSFORM,
+    );
+    transform
+        .properties
+        .insert("offset".into(), serde_json::json!(offset));
+    transform
+        .properties
+        .insert("scale".into(), serde_json::json!(scale));
+    if let Some(rotation) = rotation {
+        transform
+            .properties
+            .insert("rotation".into(), serde_json::json!(rotation));
+    }
+    graph.add_node(transform);
+    connect(graph, "uv", "transform", "uv");
+}
+
+/// The texture transform node evaluates, through the real template and
+/// drawer path, the UV `helio_mats::TextureTransform::apply` gives (glTF's
+/// convention, the material rows' `material_uv_transform`).
+#[test]
+fn gpu_texture_transform_node_matches_khr_texture_transform() {
+    let gpu = Gpu::new(false);
+    for (offset, scale, rotation) in [
+        ([0.25, 0.5], [2.0, 0.5], Some(-0.4)),
+        ([0.1, 0.2], [0.5, 1.5], None),
+    ] {
+        let mut graph = GraphDescription::new("texture transform");
+        graph.add_node(node("output", "fragment_output"));
+        transformed_uv(&mut graph, offset, scale, rotation);
+        graph.add_node(node("widen", "vec2_to_vec4"));
+        connect(&mut graph, "transform", "widen", "input");
+        connect(&mut graph, "widen", "output", "base_color");
+        let pixels = gpu.render(&graph, 0, false);
+
+        let transform = helio_mats::TextureTransform {
+            offset: offset.map(|v| v as f32),
+            scale: scale.map(|v| v as f32),
+            rotation_radians: rotation.unwrap_or(0.0) as f32,
+        };
+        // Row 0 is the albedo; pixel centres sit at UV ((x + 0.5) / 4, 1 / 8).
+        for column in 0..4 {
+            let [u, v] = transform.apply([(column as f32 + 0.5) / 4.0, 0.125]);
+            close(pixels[column], [u, v, 0.0, 1.0]);
+        }
+    }
+}
+
+/// A texture sampled through the node reads the transformed texel, in the
+/// bindless and the expanded binding alike: the fixture's 2x1 texture moved
+/// half a texture left shows its right texel where the mesh UV is on the
+/// left one.
+fn transformed_sample_suite(bindless: bool) {
+    let gpu = Gpu::new(bindless);
+    let mut graph = GraphDescription::new("transformed sample");
+    graph.add_node(node("output", "fragment_output"));
+    transformed_uv(&mut graph, [0.5, 0.0], [1.0, 1.0], Some(0.0));
+    let mut texture = node("texture", "sample_texture");
+    texture
+        .properties
+        .insert("texture".into(), serde_json::json!("test.png"));
+    graph.add_node(texture);
+    connect(&mut graph, "transform", "texture", "uv");
+    connect(&mut graph, "texture", "output", "base_color");
+    let pixels = gpu.render(&graph, 0, bindless);
+    // Slot 0's right texel (255, 255, 0, 128) at the left edge.
+    close(pixels[0], [1.0, 1.0, 0.0, 128.0 / 255.0]);
+    // Its read takes the transform's gradients (`uv_transform_gradients`).
+    assert!(adapted(&graph, 0).contains("textureSampleGrad("));
+}
+
+#[test]
+fn gpu_expanded_transformed_sample() {
+    transformed_sample_suite(false);
+}
+
+#[test]
+fn gpu_bindless_transformed_sample() {
+    transformed_sample_suite(true);
+}
+
+/// Where a stage has no derivatives (`explicit_gradients`: a visibility
+/// buffer's shade, a ray's hit), a sample through texture transforms reads
+/// at UV0's gradients through each transform's linear part, so a texture
+/// tiled 15 times still reads the mip its footprint covers.
+#[test]
+fn a_transformed_sample_chains_its_gradients_where_a_stage_has_no_derivatives() {
+    let mut graph = GraphDescription::new("tiled");
+    graph.add_node(node("output", "fragment_output"));
+    transformed_uv(&mut graph, [0.0, -2.4], [15.0, 3.4], None);
+    // A second transform after the first: the chain rule composes.
+    let mut second = node(
+        "second",
+        materials_component::graph_nodes::TEXTURE_TRANSFORM,
+    );
+    second
+        .properties
+        .insert("rotation".into(), serde_json::json!(0.5));
+    graph.add_node(second);
+    connect(&mut graph, "transform", "second", "uv");
+    let mut texture = node("texture", "sample_texture");
+    texture
+        .properties
+        .insert("texture".into(), serde_json::json!("test.png"));
+    graph.add_node(texture);
+    connect(&mut graph, "second", "texture", "uv");
+    connect(&mut graph, "texture", "output", "base_color");
+
+    let source = adapted(&graph, 0);
+    assert_eq!(
+        source.matches("material_uv_transform_linear(").count(),
+        4,
+        "{source}"
+    );
+    let lowered = helio_mats::shader::explicit_gradients(&source, 2, true);
+    assert!(
+        !lowered.contains("dpdx(") && !lowered.contains("dpdy("),
+        "{lowered}"
+    );
+    assert!(lowered.contains("= material_duv_dx;"), "{lowered}");
+    let sample = lowered
+        .lines()
+        .find(|line| line.contains("textureSampleGrad(") && line.contains("scene_textures["))
+        .expect("the sample reads at explicit gradients");
+    assert!(
+        sample.contains("_ddx") && sample.contains("_ddy"),
+        "{sample}"
+    );
+    assert!(
+        !sample.contains("material_duv_dx"),
+        "not UV0's own gradients: {sample}"
+    );
+}

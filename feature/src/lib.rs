@@ -2,7 +2,8 @@
 //! table.
 //!
 //! Every frame, before any pass runs, the table is refreshed from the
-//! scene's texture store (SceneDB owns texture residency) and published as
+//! scene's texture store (SceneDB owns texture residency) and the materials'
+//! texture data rows (`helio_mats::MATERIAL_TEXTURE_DATA`), and published as
 //! [`helio_mats::MATERIAL_TEXTURES`]: one view per texture-store slot (a
 //! white texture where a slot is empty), the material sampler and the
 //! per-material texture metadata (`helio_mats::MaterialTextureTable`).
@@ -107,11 +108,13 @@ impl Feature for MaterialsFeature {
     }
 }
 
-/// The material texture table kept in step with the scene's texture store:
-/// each store slot's texture in the table's slot of the same index (views
-/// cached by GPU texture identity, so a frame without changes binds nothing
-/// new).
+/// The material texture table kept in step with the scene: each texture
+/// store slot's texture in the table's slot of the same index (views cached
+/// by GPU texture identity, so a frame without changes binds nothing new),
+/// and the materials' texture data rows (`helio_mats::MATERIAL_TEXTURE_DATA`,
+/// a SceneDB column: rebound only when SceneDB reallocates it).
 pub struct SceneMaterialTextures {
+    scene: Option<GpuMirrorHandle>,
     store: Option<Arc<RwLock<TextureStore>>>,
     features: wgpu::Features,
     table: MaterialTextureTable,
@@ -125,6 +128,7 @@ impl SceneMaterialTextures {
         sampler: Option<&MaterialSampler>,
     ) -> Self {
         Self {
+            scene: scene.cloned(),
             store: scene.and_then(GpuMirrorHandle::texture_store),
             features: device.features(),
             table: MaterialTextureTable::new(device, queue, sampler),
@@ -138,6 +142,14 @@ impl FrameInputPublisher for SceneMaterialTextures {
     }
 
     fn update(&mut self, _ctx: &FrameInputContext<'_>) -> helio_core::Result<()> {
+        if let Some(scene) = &self.scene {
+            let rows = scene
+                .store()
+                .buffer_registry()
+                .resolve(helio_mats::MATERIAL_TEXTURE_DATA.key());
+            self.table
+                .set_texture_data(rows.as_ref().map(|rows| (&rows.buffer, rows.epoch)));
+        }
         let Some(store) = self.store.clone() else {
             return Ok(());
         };

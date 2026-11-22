@@ -18,6 +18,8 @@ engine_fs = { workspace = true }
 ui_types_common = { workspace = true }
 # The plugin gate and the registrations' collection.
 pulsar_plugins = { workspace = true }
+# The project's `texture_sampling` settings (`ProjectSettingsRegistration`).
+pulsar_settings = { workspace = true }
 # The plugin's crates. The material instances (`helio_mats::instance`) are the
 # api's types; their SceneDB attachments are registered here (an api crate
 # holds no registration).
@@ -43,6 +45,7 @@ pulsar_world_registry = { workspace = true }
 psgc = { workspace = true }
 wgpu = { workspace = true }
 pollster = "=0.4.0"
+bytemuck = { workspace = true }
 image = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

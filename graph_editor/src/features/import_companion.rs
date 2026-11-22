@@ -9,9 +9,10 @@
 
 use std::path::Path;
 
+use materials_component::graph_nodes::{texture_transform_properties, TEXTURE_TRANSFORM};
 use plugin_editor_api::{
     CompanionOutput, ImportCompanion, ImportCompanionContext, ImportOffer, ImportProbe,
-    SourceImageRole, SourceSurface,
+    SourceImageRole, SourceSurface, SourceUvTransform,
 };
 use psgc::{
     Connection, ConnectionType, GraphDescription, NodeInstance, Pin, PinInstance, PinType, Position,
@@ -205,9 +206,46 @@ fn connect(graph: &mut GraphDescription, from: &str, to: &str, pin: &str) {
     ));
 }
 
+/// The texture transform node reading the mesh UV through `transform`,
+/// added once per distinct transform (the images of a glTF material usually
+/// share one, which the user then edits in one place): its id.
+fn uv_transform_node(
+    graph: &mut GraphDescription,
+    transforms: &mut Vec<(SourceUvTransform, String)>,
+    transform: SourceUvTransform,
+    y: f64,
+) -> Result<String, String> {
+    if let Some((_, id)) = transforms.iter().find(|(known, _)| *known == transform) {
+        return Ok(id.clone());
+    }
+    let id = format!("uv_transform_{}", transforms.len());
+    let mut instance = node(&id, TEXTURE_TRANSFORM, 150.0, y)?;
+    let as_materials = helio_mats::TextureTransform {
+        offset: transform.offset,
+        scale: transform.scale,
+        rotation_radians: transform.rotation,
+    };
+    for (pin, value) in texture_transform_properties(&as_materials) {
+        instance.properties.insert(pin.into(), value);
+    }
+    graph.add_node(instance);
+    connect(graph, "uv", &id, "uv");
+    transforms.push((transform, id.clone()));
+    Ok(id)
+}
+
 /// One image sample per image, wired to the output pin its role feeds. A
 /// normal map goes through a `normal_map` node first: the output's normal pin
 /// takes a world-space `vec3`, and the sample is a tangent-space `vec4`.
+///
+/// An image the source reads through a UV transform (glTF
+/// `KHR_texture_transform`) is sampled through a texture transform node
+/// with that transform, so the material tiles as the source does and the
+/// tiling is the material's own, editable in the graph. A normal map's
+/// tangent frame stays the mesh UV's, as the material rows' (the vertex
+/// tangents) and glTF viewers' do. An image the source reads from another
+/// UV set is read from UV set 0: a material graph's input carries that set
+/// only (`MaterialInput::tex_coords`).
 fn build_graph(
     surface: &SourceSurface,
     mut reference: impl FnMut(&Path) -> Result<String, String>,
@@ -215,16 +253,30 @@ fn build_graph(
     let mut graph = GraphDescription::new(&surface.name);
     graph.add_node(node("output", "fragment_output", 900.0, 200.0)?);
     graph.add_node(node("uv", "frag_uv", 0.0, 200.0)?);
+    let mut transforms = Vec::new();
 
     for (row, image) in surface.images.iter().enumerate() {
         let y = row as f64 * 220.0;
+        if image.uv_set != 0 {
+            tracing::warn!(
+                surface = %surface.name,
+                image = %image.path.display(),
+                uv_set = image.uv_set,
+                "the image is read from UV set 0: a material graph reads that set only"
+            );
+        }
         let sample = format!("sample_{row}");
         let mut sampler = node(&sample, "sample_texture", 300.0, y)?;
         sampler
             .properties
             .insert("texture".into(), serde_json::json!(reference(&image.path)?));
         graph.add_node(sampler);
-        connect(&mut graph, "uv", &sample, "uv");
+        let at = if image.transform.is_identity() {
+            "uv".to_string()
+        } else {
+            uv_transform_node(&mut graph, &mut transforms, image.transform, y)?
+        };
+        connect(&mut graph, &at, &sample, "uv");
 
         // (channel node, output pin) pairs fed by this image.
         let feeds: &[(Option<&str>, &str)] = match image.role {
@@ -377,10 +429,7 @@ mod tests {
             name: "Rock Wall".into(),
             images: roles
                 .iter()
-                .map(|(role, file)| SourceImage {
-                    role: *role,
-                    path: PathBuf::from(file),
-                })
+                .map(|(role, file)| SourceImage::new(*role, PathBuf::from(file)))
                 .collect(),
         }
     }
@@ -523,10 +572,10 @@ mod tests {
         let surfaces = vec![SourceSurface {
             slot: 0,
             name: "Material.001".into(),
-            images: vec![plugin_editor_api::SourceImage {
-                role: SourceImageRole::BaseColor,
-                path: outside.path().join("a_BaseColor.jpg"),
-            }],
+            images: vec![plugin_editor_api::SourceImage::new(
+                SourceImageRole::BaseColor,
+                outside.path().join("a_BaseColor.jpg"),
+            )],
         }];
         let context = ImportCompanionContext {
             project_root: root,
@@ -556,5 +605,141 @@ mod tests {
         assert!(probe("mesh", &[PathBuf::from("x.png")]));
         assert!(!probe("mesh", &[]));
         assert!(!probe("other", &[PathBuf::from("x.png")]));
+    }
+
+    /// The Poly Haven tree's branches: base colour, normal and ARM read
+    /// through `KHR_texture_transform` offset (0, -2.4), scale (15, 3.4);
+    /// its occlusion as it is.
+    fn branches(root: &Path) -> SourceSurface {
+        let tiled = SourceUvTransform {
+            offset: [0.0, -2.4],
+            scale: [15.0, 3.4],
+            rotation: 0.0,
+        };
+        let image = |role, file: &str, transform| {
+            engine_fs::virtual_fs::write_file(&root.join(file), b"png").unwrap();
+            SourceImage {
+                transform,
+                ..SourceImage::new(role, root.join(file))
+            }
+        };
+        SourceSurface {
+            slot: 0,
+            name: "branches".into(),
+            images: vec![
+                image(SourceImageRole::BaseColor, "bark_diff.png", tiled),
+                image(SourceImageRole::Normal, "bark_nor.png", tiled),
+                image(SourceImageRole::MetallicRoughness, "bark_arm.png", tiled),
+                image(
+                    SourceImageRole::Occlusion,
+                    "bark_ao.png",
+                    SourceUvTransform::IDENTITY,
+                ),
+            ],
+        }
+    }
+
+    /// A transformed slot survives the import: the written `.material`
+    /// samples its images through one texture transform node holding the
+    /// slot's transform (shared by the images that share it), the untiled
+    /// image and the normal map's tangent frame read the mesh UV, the asset
+    /// saves and loads back unchanged, and the material compiles to a
+    /// program that reads the transformed UV at its chained gradients.
+    #[test]
+    fn a_transformed_slot_is_sampled_through_a_texture_transform_node() {
+        let dir = TempDir::new();
+        let root = dir.path();
+        let surfaces = vec![branches(root)];
+        let context = ImportCompanionContext {
+            project_root: root,
+            source: &root.join("tree.gltf"),
+            native_asset: &root.join("tree.mesh"),
+            surfaces: &surfaces,
+        };
+        let outputs = MaterialFromImages.run(&context).unwrap();
+        let written = String::from_utf8(
+            engine_fs::virtual_fs::read_file(&outputs[0].path.join(GRAPH_FILE)).unwrap(),
+        )
+        .unwrap();
+        let asset = deserialize_shader(&written).unwrap();
+        let graph = &asset.main_graph;
+
+        let transforms: Vec<_> = graph
+            .nodes
+            .values()
+            .filter(|node| node.node_type == TEXTURE_TRANSFORM)
+            .collect();
+        assert_eq!(transforms.len(), 1, "one node for the shared transform");
+        let transform = transforms[0];
+        assert_eq!(
+            materials_component::graph_nodes::texture_transform_of(transform),
+            Some(helio_mats::TextureTransform {
+                offset: [0.0, -2.4],
+                scale: [15.0, 3.4],
+                rotation_radians: 0.0,
+            })
+        );
+        let feeds = |from: &str, to: &str, pin: &str| {
+            graph
+                .connections
+                .iter()
+                .any(|c| c.source_node == from && c.target_node == to && c.target_pin == pin)
+        };
+        assert!(feeds("uv", &transform.id, "uv"));
+        for sample in ["sample_0", "sample_1", "sample_2"] {
+            assert!(
+                feeds(&transform.id, sample, "uv"),
+                "{sample} reads the tiled UV"
+            );
+        }
+        assert!(
+            feeds("uv", "sample_3", "uv"),
+            "the untiled image reads the mesh UV"
+        );
+        assert!(
+            feeds("uv", "normal_map_1", "uv"),
+            "the tangent frame is the mesh UV's"
+        );
+
+        // Save and load: the transform is part of the asset.
+        let saved = serialize_shader_with_header(&asset).unwrap();
+        let loaded = deserialize_shader(&saved).unwrap();
+        assert_eq!(
+            loaded.main_graph.nodes[&transform.id].properties,
+            transform.properties
+        );
+        assert_eq!(loaded.main_graph.connections.len(), graph.connections.len());
+
+        // The material compiles: its tiled samples read through the
+        // materials' own transform at the transform's gradients, and the
+        // program the editor draws it with validates.
+        let preview =
+            materials_component::graph_preview::compile_graph(&loaded.main_graph, root).unwrap();
+        assert!(preview.snippet.contains("material_uv_transform("));
+        assert_eq!(
+            preview.snippet.matches("textureSampleGrad(").count(),
+            3,
+            "{}",
+            preview.snippet
+        );
+        assert!(preview.snippet.contains("dpdx(input.tex_coords)"));
+        let program = materials_component::preview_program::program_source(&preview).unwrap();
+        crate::features::compilation::compiler::validate_wgsl(&program).unwrap();
+    }
+
+    /// A texture transform node placed from the palette starts at the
+    /// identity (unit scale), not at its inputs' zero.
+    #[test]
+    fn a_placed_texture_transform_starts_at_the_identity() {
+        let definition = NodeDefinitions::load()
+            .get_node_definition(TEXTURE_TRANSFORM)
+            .expect("the materials register the texture transform node");
+        let node =
+            crate::profile::node_from_definition(definition, "t", Position { x: 0.0, y: 0.0 });
+        assert_eq!(
+            materials_component::graph_nodes::texture_transform_of(&node),
+            Some(helio_mats::TextureTransform::IDENTITY)
+        );
+        assert_eq!(node.properties["scale"], serde_json::json!([1.0, 1.0]));
     }
 }

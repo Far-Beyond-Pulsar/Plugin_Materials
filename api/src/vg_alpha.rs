@@ -1,4 +1,4 @@
-//! Alpha-mask evaluation for virtual geometry (Nanite-style programmable
+//! Alpha-mask evaluation for virtual geometry (programmable
 //! raster of masked materials).
 //!
 //! The visibility-buffer raster tiers do not run the material, but a masked
