@@ -11,6 +11,13 @@ use plugin_editor_api::AssetKind;
 pub(crate) fn build(p: &mut pulsar_plugins::PluginBuilder) {
     // ── Rendering ───────────────────────────────────────────────────────
 
+    // The project's `texture_sampling` settings (the material sampler).
+    p.add(pulsar_settings::project::ProjectSettingsRegistration {
+        origin: p.origin(),
+        name: "materials.texture_sampling",
+        register: materials_component::sampler::register,
+    });
+
     // The material texture table every kind's drawers bind, read with the
     // project's material sampler.
     p.add(RenderFeatureRegistration {

@@ -4,13 +4,72 @@
 //! it is wgpu's default: nearest filtering and clamp-to-edge, which makes mips
 //! pick a level by screen footprint but then read it with point sampling, and
 //! stops a texture tiling past `[0, 1]`. The engine sets a better default
-//! here, and projects can change it:
+//! here, and projects can change it in their `texture_sampling` settings
+//! (registered by the plugin root through [`register`]):
 //!
-//! | project setting (`streaming`) | default | meaning |
+//! | project setting (`texture_sampling`) | default | meaning |
 //! |---|---|---|
-//! | `texture_filter` | `"trilinear"` | `"trilinear"`, `"bilinear"` (no blend between mips) or `"nearest"` (pixel art) |
-//! | `texture_anisotropy` | `8` | 1 to 16; only applies to `"trilinear"` |
-//! | `texture_wrap` | `"repeat"` | `"repeat"` or `"clamp"` |
+//! | `filter` | `"trilinear"` | `"trilinear"`, `"bilinear"` (no blend between mips) or `"nearest"` (pixel art) |
+//! | `anisotropy` | `8` | 1 to 16; only applies to `"trilinear"` |
+//! | `wrap` | `"repeat"` | `"repeat"` or `"clamp"` |
+
+use engine_state::settings::{
+    ConfigManager, ConfigValue, DropdownOption, FieldType, NamespaceSchema, SchemaEntry,
+    Validator, NS_PROJECT,
+};
+
+/// The project settings owner of the material sampler.
+pub const OWNER: &str = "texture_sampling";
+
+/// Register the `project.texture_sampling` settings (the plugin root submits
+/// this through `ProjectSettingsRegistration`).
+pub fn register(cfg: &'static ConfigManager) {
+    let defaults = SamplerSettings::default();
+    let schema = NamespaceSchema::new("Texture Sampling", "How material textures are read")
+        .setting(
+            "filter",
+            SchemaEntry::new("How material textures are filtered", "trilinear")
+                .label("Texture Filtering")
+                .page("Sampling")
+                .field_type(FieldType::Dropdown {
+                    options: vec![
+                        DropdownOption::new("Trilinear (smooth, anisotropic)", "trilinear"),
+                        DropdownOption::new("Bilinear", "bilinear"),
+                        DropdownOption::new("Nearest (pixel art)", "nearest"),
+                    ],
+                })
+                .validator(Validator::string_one_of(["trilinear", "bilinear", "nearest"])),
+        )
+        .setting(
+            "anisotropy",
+            SchemaEntry::new(
+                "Anisotropic filtering level; only applies to trilinear filtering",
+                i64::from(defaults.anisotropy),
+            )
+            .label("Anisotropy")
+            .page("Sampling")
+            .field_type(FieldType::NumberInput {
+                min: Some(1.0),
+                max: Some(16.0),
+                step: Some(1.0),
+            })
+            .validator(Validator::int_range(1, 16)),
+        )
+        .setting(
+            "wrap",
+            SchemaEntry::new("What happens to texture coordinates outside 0 to 1", "repeat")
+                .label("Texture Wrap")
+                .page("Sampling")
+                .field_type(FieldType::Dropdown {
+                    options: vec![
+                        DropdownOption::new("Repeat", "repeat"),
+                        DropdownOption::new("Clamp to edge", "clamp"),
+                    ],
+                })
+                .validator(Validator::string_one_of(["repeat", "clamp"])),
+        );
+    let _ = cfg.register(NS_PROJECT, OWNER, schema);
+}
 
 /// How texture coordinates outside `[0, 1]` are read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,26 +105,26 @@ impl Default for SamplerSettings {
 }
 
 impl SamplerSettings {
-    /// Read the project's `streaming.texture_*` settings, falling back to the
+    /// Read the project's `texture_sampling` settings, falling back to the
     /// defaults for anything missing or unrecognised.
     pub fn from_project() -> Self {
         let get = |key: &str| {
             engine_state::settings::global_config()
-                .get(engine_state::settings::NS_PROJECT, "streaming", key)
+                .get(NS_PROJECT, OWNER, key)
                 .ok()
         };
         let text = |key: &str| match get(key) {
-            Some(engine_state::settings::ConfigValue::String(value)) => Some(value),
+            Some(ConfigValue::String(value)) => Some(value),
             _ => None,
         };
-        let anisotropy = match get("texture_anisotropy") {
-            Some(engine_state::settings::ConfigValue::Int(value)) => Some(value),
+        let anisotropy = match get("anisotropy") {
+            Some(ConfigValue::Int(value)) => Some(value),
             _ => None,
         };
         Self::from_values(
-            text("texture_filter").as_deref(),
+            text("filter").as_deref(),
             anisotropy,
-            text("texture_wrap").as_deref(),
+            text("wrap").as_deref(),
         )
     }
 
@@ -227,5 +286,31 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Every value the settings' dropdowns store is one the sampler reads, and
+    /// each picks a different sampler (a dropdown that stored its labels made
+    /// Nearest and Clamp unreachable).
+    #[test]
+    fn every_stored_choice_reaches_the_sampler() {
+        let cfg: &'static ConfigManager = Box::leak(Box::new(ConfigManager::new()));
+        register(cfg);
+        let settings = cfg.list_settings(NS_PROJECT, OWNER).expect("registered");
+        let values = |key: &str| -> Vec<String> {
+            match settings.iter().find(|info| info.key == key).and_then(|info| info.field_type.clone()) {
+                Some(FieldType::Dropdown { options }) => options.into_iter().map(|o| o.value).collect(),
+                other => panic!("{key} is not a dropdown: {other:?}"),
+            }
+        };
+        let filters: Vec<Filter> = values("filter")
+            .iter()
+            .map(|v| SamplerSettings::from_values(Some(v), None, None).filter)
+            .collect();
+        assert_eq!(filters, [Filter::Trilinear, Filter::Bilinear, Filter::Nearest]);
+        let wraps: Vec<Wrap> = values("wrap")
+            .iter()
+            .map(|v| SamplerSettings::from_values(None, None, Some(v)).wrap)
+            .collect();
+        assert_eq!(wraps, [Wrap::Repeat, Wrap::Clamp]);
     }
 }
