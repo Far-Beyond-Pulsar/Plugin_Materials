@@ -57,10 +57,23 @@ impl RadiantGraphRegistry {
 
 /// Process-wide graph source registry shared by SceneDB's material projection
 /// and the render passes. The source is immutable for a given content hash.
-static ACTIVE_GRAPHS: OnceLock<RwLock<RadiantGraphRegistry>> = OnceLock::new();
+///
+/// It lives in the engine's state store, not in a static of this crate: every
+/// plugin library links its own copy of this crate, and a static would give the
+/// materials library one registry (the graphs it compiles) and the mesh
+/// library's G-buffer pass another, empty one, so every graph material drew as
+/// the default. Without an engine (tests, standalone hosts) the copy's own
+/// registry answers.
+static OWN_GRAPHS: OnceLock<RwLock<RadiantGraphRegistry>> = OnceLock::new();
 
-fn active_graphs() -> &'static RwLock<RadiantGraphRegistry> {
-    ACTIVE_GRAPHS.get_or_init(|| RwLock::new(RadiantGraphRegistry::new()))
+impl Default for RadiantGraphRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn shared_graphs() -> Option<engine_state::resource::ResourceHandle<RadiantGraphRegistry>> {
+    engine_state::EngineContext::global().map(|context| context.store.get_or_init())
 }
 
 /// Register graph WGSL for render rows that reference `graph_hash`.
@@ -68,8 +81,14 @@ pub fn register_graph_source(graph_hash: u64, wgsl_snippet: String) {
     if graph_hash == 0 {
         return;
     }
-    if let Ok(mut registry) = active_graphs().write() {
-        registry.register(graph_hash, wgsl_snippet);
+    match shared_graphs() {
+        Some(shared) => shared.update(|registry| registry.register(graph_hash, wgsl_snippet)),
+        None => {
+            let own = OWN_GRAPHS.get_or_init(|| RwLock::new(RadiantGraphRegistry::new()));
+            if let Ok(mut registry) = own.write() {
+                registry.register(graph_hash, wgsl_snippet);
+            }
+        }
     }
 }
 
@@ -79,9 +98,13 @@ pub fn graph_source(graph_hash: u64) -> Option<String> {
     if graph_hash == 0 {
         return None;
     }
-    active_graphs()
-        .read()
-        .ok()?
-        .get(graph_hash)
-        .map(str::to_owned)
+    match shared_graphs() {
+        Some(shared) => shared.read().get(graph_hash).map(str::to_owned),
+        None => OWN_GRAPHS
+            .get()?
+            .read()
+            .ok()?
+            .get(graph_hash)
+            .map(str::to_owned),
+    }
 }

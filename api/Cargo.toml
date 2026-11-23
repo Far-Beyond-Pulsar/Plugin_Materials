@@ -24,6 +24,8 @@ helio-core = { workspace = true }
 # (`helio_frame_api::gbuffer::SURFACE_SNIPPET`).
 helio-frame-api = { workspace = true }
 pulsar_scenedb = { workspace = true }
+# The engine state store the graph registry lives in (one per process, not one per library).
+engine_state = { workspace = true }
 wgpu = { workspace = true }
 bytemuck = { workspace = true, features = ["derive"] }
 log = { workspace = true }
