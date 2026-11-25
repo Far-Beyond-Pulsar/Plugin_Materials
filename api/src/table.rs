@@ -37,6 +37,14 @@ pub struct MaterialTextureTable {
     slots: Vec<Option<(wgpu::Texture, wgpu::TextureView)>>,
     /// The table's views (a slot's or the fallback), pointing into `self`.
     view_refs: Vec<&'static wgpu::TextureView>,
+    /// Whether [`Self::bindings`] hands out only the live prefix of the views
+    /// (the device binds arrays partially: `helio_core::texture_table_binds_partially`).
+    partial: bool,
+    /// Slots from the first that may hold a texture: one past the highest slot
+    /// the scene's texture store has handed out or that was ever set. Never
+    /// shrinks (a row still naming a released slot reads the fallback, as it
+    /// always did); at least 1.
+    live: usize,
     version: u64,
 }
 
@@ -92,6 +100,8 @@ impl MaterialTextureTable {
             texture_data: None,
             slots: vec![None; binding.max_textures],
             view_refs: Vec::with_capacity(binding.max_textures),
+            partial: helio_core::texture_table_binds_partially(device.features()),
+            live: 1,
             version: 0,
         };
         table.refresh_refs();
@@ -137,6 +147,7 @@ impl MaterialTextureTable {
                 ));
             }
             *cached = Some((texture.clone(), texture.create_view(&Default::default())));
+            self.live = self.live.max(slot + 1);
         } else {
             *cached = None;
         }
@@ -164,14 +175,35 @@ impl MaterialTextureTable {
         true
     }
 
-    /// The table as drawers bind it.
+    /// Tells the table the texture store has handed out slots below `count`,
+    /// so none past it is in use: where a device binds arrays partially the
+    /// table binds that many views, not its whole capacity. Only grows;
+    /// returns whether it did (the bindings' version then moves).
+    pub fn set_live_slots(&mut self, count: usize) -> bool {
+        let count = count.clamp(1, self.slots.len());
+        if count <= self.live {
+            return false;
+        }
+        self.live = count;
+        self.version = self.version.wrapping_add(1);
+        true
+    }
+
+    /// The table as drawers bind it: every slot, or where the device binds
+    /// arrays partially the first [`Self::set_live_slots`] ones (a drawer's
+    /// layout and shader keep the full capacity).
     pub fn bindings(&self) -> MaterialTextureBindings<'_> {
+        let bound = if self.partial {
+            self.live
+        } else {
+            self.view_refs.len()
+        };
         MaterialTextureBindings {
             material_textures: self
                 .texture_data
                 .as_ref()
                 .map_or(&self.empty_texture_data, |(buffer, _)| buffer),
-            texture_views: &self.view_refs,
+            texture_views: &self.view_refs[..bound],
             sampler: &self.sampler,
             version: self.version,
         }

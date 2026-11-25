@@ -166,6 +166,7 @@ impl FrameInputPublisher for SceneMaterialTextures {
                 "SceneDB texture slots exceed the device material binding capacity".into(),
             ));
         }
+        self.table.set_live_slots(guard.slot_count() as usize);
         for slot in 0..self.table.capacity() {
             self.table
                 .set(self.features, slot, guard.texture(slot as u32))

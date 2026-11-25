@@ -115,7 +115,20 @@ impl MaterialBindingConfig {
         texture_views: &'a [&'a wgpu::TextureView],
         sampler: &'a wgpu::Sampler,
     ) {
-        assert_eq!(texture_views.len(), self.max_textures);
+        // A binding array may be given only its first slots (a table that
+        // binds partially, `MaterialTextureTable::bindings`); one binding
+        // per texture needs them all.
+        match self.mode {
+            MaterialBindingMode::BindingArray => {
+                assert!(
+                    (1..=self.max_textures).contains(&texture_views.len()),
+                    "{} views for a texture table of {} slots",
+                    texture_views.len(),
+                    self.max_textures
+                );
+            }
+            MaterialBindingMode::Expanded => assert_eq!(texture_views.len(), self.max_textures),
+        }
         entries.push(wgpu::BindGroupEntry {
             binding: first_binding,
             resource: wgpu::BindingResource::Sampler(sampler),
@@ -247,6 +260,11 @@ pub struct MaterialTextureBindings<'a> {
     /// ([`crate::MATERIAL_TEXTURE_DATA`]; one zero row where the scene keeps
     /// none), read for a material with [`FLAG_TEXTURE_DATA`].
     pub material_textures: &'a wgpu::Buffer,
+    /// The table's views from slot 0: every slot, or where the device binds
+    /// texture arrays partially ([`helio_core::texture_table_binds_partially`])
+    /// the slots the scene's textures occupy (at least one), which a binding
+    /// array takes as it is (`MaterialBindingConfig::append_bind_group_entries`).
+    /// A slot past it holds no texture.
     pub texture_views: &'a [&'a wgpu::TextureView],
     /// The one sampler every texture is read through (`scene_sampler`).
     pub sampler: &'a wgpu::Sampler,
