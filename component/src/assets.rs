@@ -381,7 +381,7 @@ fn compiled_graph(
     for (asset, texture, image) in &graph.textures {
         // A texture's GPU copy follows the material's version: the material
         // reloads when one of its textures changes.
-        let slot = helio_component::texture_assets::resident_slot(
+        let slot = helio_component::texture_assets::resident_slot_staged(
             *texture,
             version,
             image,
