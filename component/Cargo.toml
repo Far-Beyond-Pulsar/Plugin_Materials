@@ -10,6 +10,8 @@ description = "Materials (pulsar.materials): the material assets (loader and rel
 name = "materials_component"
 
 [dependencies]
+# CPU scopes of the material bind (`Material::bind_graph`).
+profiling = { workspace = true }
 # Warnings for materials the engine cannot draw as authored (`assets`).
 tracing = { workspace = true }
 # The preview program (`preview_program`): its pipeline, error scope and

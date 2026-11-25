@@ -199,12 +199,20 @@ fn load_graph(source: &str, bytes: &[u8]) -> Result<GraphMaterial, String> {
         .map_err(|error| format!("invalid main_graph: {error}"))?;
     let root = engine_state::get_project_path().map(PathBuf::from);
     let graph_textures = crate::graph::texture_assets(&graph)?;
+    // What each image is for decides its format (a colour is stored as sRGB,
+    // a roughness or normal map is not), so it is cooked for that use here, on
+    // the loader thread: the bind on the frame thread then finds it ready.
+    let uses = crate::graph::texture_uses(&graph);
     let mut textures = Vec::new();
     let mut texture_sources = Vec::with_capacity(graph_textures.len());
     for asset in graph_textures {
         let path = crate::graph::texture_path(&asset, root.as_deref());
         let texture_source = helio_component::texture_assets::texture_source_for_file(&path);
-        let image = helio_component::texture_assets::decode_image_file(&path)
+        let usage = uses
+            .get(&asset)
+            .copied()
+            .unwrap_or(helio_component::cooked_texture::TextureUse::Color);
+        let image = helio_component::texture_assets::decode_image_file_for(&path, usage)
             .map_err(|error| format!("texture '{asset}': {error}"))?;
         let id = AssetId::of(
             helio_component::texture_assets::TEXTURE_ASSET_KIND,
@@ -338,6 +346,7 @@ fn compiled_graph(
     graph: &GraphMaterial,
     mirror: &pulsar_scenedb::gpu::GpuMirrorHandle,
 ) -> Result<(u64, [u32; 5]), String> {
+    profiling::profile_scope!("Material::bind_graph (textures to slots)");
     let assets = crate::graph::texture_assets(&graph.graph)?;
     if assets.len() > crate::graph::GRAPH_TEXTURE_FIELDS.len() {
         return Err(format!(
