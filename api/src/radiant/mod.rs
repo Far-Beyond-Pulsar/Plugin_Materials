@@ -6,10 +6,10 @@
 
 mod graph_registry;
 mod material_flags;
-mod shader_cache;
+mod program;
 pub mod template;
 
 pub use graph_registry::{graph_source, register_graph_source, RadiantGraphRegistry};
 pub use material_flags::*;
-pub use shader_cache::*;
+pub use program::*;
 pub use template::*;

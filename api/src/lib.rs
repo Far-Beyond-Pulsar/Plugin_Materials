@@ -40,7 +40,7 @@ pub use material::{
     MATERIAL_CLASS_FOLIAGE, MATERIAL_CLASS_SKIN, MATERIAL_CLASS_SUBSURFACE, MAX_MATERIAL_TEXTURES,
 };
 pub use radiant::{
-    graph_source, register_graph_source, RadiantGraphRegistry, RadiantShaderCache,
+    graph_source, register_graph_source, RadiantGraphRegistry, compose_program,
     RadiantShaderKey, RadiantTemplate, RadiantTemplateRegistry, SharedTemplateRegistry,
 };
 pub use row::{MaterialRow, MATERIALS};
