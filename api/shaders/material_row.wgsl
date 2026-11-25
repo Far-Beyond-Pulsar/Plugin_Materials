@@ -55,6 +55,17 @@ const MATERIAL_CLASS_WORD: u32 = 19u;
 // No texture in a `tex_*` slot (`helio_mats::GpuMaterial::NO_TEXTURE`).
 const MATERIAL_NO_TEXTURE: u32 = 0xffffffffu;
 
+// The table slot that holds no texture and reads white
+// (`helio_mats::GpuMaterial::FALLBACK_TEXTURE_SLOT`, `helio_core::TEXTURE_TABLE_RESERVED_SLOTS`).
+const MATERIAL_FALLBACK_TEXTURE_SLOT: u32 = 0u;
+
+// The slot a material graph reads for a row's texture field: an unassigned
+// one reads the white slot, since a graph indexes the table with the field
+// unguarded and `MATERIAL_NO_TEXTURE` is past the end of the bound views.
+fn material_graph_texture_slot(slot: u32) -> u32 {
+    return select(slot, MATERIAL_FALLBACK_TEXTURE_SLOT, slot == MATERIAL_NO_TEXTURE);
+}
+
 // `helio_mats::MaterialWorkflow`.
 const MATERIAL_WORKFLOW_METALLIC: u32 = 0u;
 const MATERIAL_WORKFLOW_SPECULAR: u32 = 1u;

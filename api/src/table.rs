@@ -133,6 +133,11 @@ impl MaterialTextureTable {
             return Ok(false);
         }
         if let Some(texture) = texture {
+            if (slot as u32) < helio_core::TEXTURE_TABLE_RESERVED_SLOTS {
+                return Err(format!(
+                    "material texture slot {slot} is reserved for the white fallback; the texture store must be created with `TextureStore::with_reserved_slots(.., helio_core::TEXTURE_TABLE_RESERVED_SLOTS)`"
+                ));
+            }
             if texture.dimension() != wgpu::TextureDimension::D2
                 || texture.depth_or_array_layers() != 1
                 || texture.sample_count() != 1

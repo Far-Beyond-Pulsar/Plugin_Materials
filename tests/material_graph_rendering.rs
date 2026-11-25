@@ -856,3 +856,21 @@ fn a_transformed_sample_chains_its_gradients_where_a_stage_has_no_derivatives() 
         "not UV0's own gradients: {sample}"
     );
 }
+
+#[test]
+fn an_unassigned_texture_field_reads_the_white_slot() {
+    let graph = texture_graph(2.0, Some(0.25), true);
+    let source = adapted(&graph, 1);
+    // The graph indexes the table with the row's fields; the caller maps an
+    // unassigned one (u32::MAX, past every bound view) to the reserved white slot.
+    for field in material_graph::GRAPH_TEXTURE_FIELDS {
+        assert!(
+            source.contains(&format!(
+                "graph_material.{field} = material_graph_texture_slot(material.{field});"
+            )),
+            "{field} is not guarded: {source}"
+        );
+    }
+    assert!(source.contains("pulsar_material_graph(graph_material, input)"));
+    assert!(!source.contains("pulsar_material_graph(material, input)"));
+}

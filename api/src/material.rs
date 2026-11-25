@@ -250,6 +250,12 @@ pub struct GpuMaterial {
 impl GpuMaterial {
     /// Index used to indicate "no texture bound"
     pub const NO_TEXTURE: u32 = u32::MAX;
+
+    /// The texture table slot that holds no texture and is bound white: what a
+    /// material graph reads for a field that is `NO_TEXTURE`. The host reserves
+    /// it (`helio_core::TEXTURE_TABLE_RESERVED_SLOTS`); `material_row.wgsl`
+    /// repeats the number (`MATERIAL_FALLBACK_TEXTURE_SLOT`, tested to agree).
+    pub const FALLBACK_TEXTURE_SLOT: u32 = 0;
 }
 
 /// Borrowed material-texture state for passes that sample the material
@@ -359,5 +365,33 @@ mod material_binding_tests {
             1
         );
         assert!(entries.iter().all(|entry| entry.count.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod fallback_slot_tests {
+    use super::GpuMaterial;
+
+    /// The shader's slot for "no texture" is the number the host reserves in the
+    /// texture table, and the helper that maps to it guards exactly the unassigned
+    /// value.
+    #[test]
+    fn the_shaders_fallback_slot_is_the_reserved_slot() {
+        let wgsl = include_str!("../shaders/material_row.wgsl");
+        assert!(
+            wgsl.contains(&format!(
+                "const MATERIAL_FALLBACK_TEXTURE_SLOT: u32 = {}u;",
+                GpuMaterial::FALLBACK_TEXTURE_SLOT
+            )),
+            "material_row.wgsl and GpuMaterial::FALLBACK_TEXTURE_SLOT disagree"
+        );
+        assert!(
+            GpuMaterial::FALLBACK_TEXTURE_SLOT < helio_core::TEXTURE_TABLE_RESERVED_SLOTS,
+            "the fallback slot must be one the host reserves"
+        );
+        assert!(wgsl.contains(
+            "return select(slot, MATERIAL_FALLBACK_TEXTURE_SLOT, slot == MATERIAL_NO_TEXTURE);"
+        ));
+        assert_eq!(GpuMaterial::NO_TEXTURE, 0xffff_ffff, "the WGSL const MATERIAL_NO_TEXTURE");
     }
 }

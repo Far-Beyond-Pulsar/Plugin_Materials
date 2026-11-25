@@ -448,7 +448,17 @@ fn adapt_graph_wgsl(generated: &str) -> Result<String, String> {
     );
     source.replace_range(entry..=open, &replacement);
 
-    let body = r#"let graph_surface = pulsar_material_graph(material, input);
+    // A graph indexes the texture table with the row's texture fields as they are,
+    // and a field the row leaves unassigned is `MATERIAL_NO_TEXTURE` (`u32::MAX`),
+    // an index past any table: the graph reads the table's reserved white slot
+    // for it (`material_graph_texture_slot`).
+    let body = r#"var graph_material = material;
+graph_material.tex_base_color = material_graph_texture_slot(material.tex_base_color);
+graph_material.tex_normal = material_graph_texture_slot(material.tex_normal);
+graph_material.tex_roughness = material_graph_texture_slot(material.tex_roughness);
+graph_material.tex_emissive = material_graph_texture_slot(material.tex_emissive);
+graph_material.tex_occlusion = material_graph_texture_slot(material.tex_occlusion);
+let graph_surface = pulsar_material_graph(graph_material, input);
 albedo = graph_surface.base_color;
 // Preserve the connected RGBA color's alpha. The separate opacity input
 // modulates coverage and defaults to 1 when it is not connected.
