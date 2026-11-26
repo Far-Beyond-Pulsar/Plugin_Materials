@@ -98,7 +98,7 @@ fn with_session<R>(f: impl FnOnce(&AiSession) -> Result<R>) -> Result<R> {
         .ok_or_else(|| anyhow!("No active blueprint file in AI session"))?;
     let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
         anyhow!(
-            "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
+            "Material graph is not open in editor: {}. Open it with editor_open_file first.",
             requested.display()
         )
     })?;
@@ -119,7 +119,7 @@ fn with_session_mut<R>(f: impl FnOnce(&mut AiSession) -> Result<R>) -> Result<R>
         .ok_or_else(|| anyhow!("No active blueprint file in AI session"))?;
     let key = resolve_session_key(&guard, &requested).ok_or_else(|| {
         anyhow!(
-            "Blueprint is not open in editor: {}. Call open_file_in_default_editor first.",
+            "Material graph is not open in editor: {}. Open it with editor_open_file first.",
             requested.display()
         )
     })?;
@@ -268,8 +268,8 @@ fn counts(graph: &GraphDescription) -> Value {
 }
 
 /// Summarize graph-wide structure and counts.
-#[tool(category = "blueprint")]
-pub fn blueprint_query_graph() -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_query_graph() -> Result<Value> {
     with_session(|session| {
         Ok(json!({
             "ok": true,
@@ -282,8 +282,8 @@ pub fn blueprint_query_graph() -> Result<Value> {
 }
 
 /// List nodes with optional filtering and pagination.
-#[tool(category = "blueprint")]
-pub fn blueprint_list_nodes(
+#[tool(category = "material_graph")]
+pub fn material_graph_list_nodes(
     query: Option<String>,
     definition_id: Option<String>,
     offset: Option<i64>,
@@ -341,8 +341,8 @@ pub fn blueprint_list_nodes(
 }
 
 /// Get one node by id.
-#[tool(category = "blueprint")]
-pub fn blueprint_get_node(id: String) -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_get_node(id: String) -> Result<Value> {
     with_session(|session| {
         let node = session.graph.nodes.get(&id);
         Ok(json!({
@@ -354,8 +354,8 @@ pub fn blueprint_get_node(id: String) -> Result<Value> {
 }
 
 /// Add a node from node definitions to the current graph.
-#[tool(category = "blueprint")]
-pub fn blueprint_add_node(
+#[tool(category = "material_graph")]
+pub fn material_graph_add_node(
     definition_id: String,
     x: f64,
     y: f64,
@@ -387,8 +387,8 @@ pub fn blueprint_add_node(
 }
 
 /// Update node position/properties.
-#[tool(category = "blueprint")]
-pub fn blueprint_update_node(
+#[tool(category = "material_graph")]
+pub fn material_graph_update_node(
     id: String,
     x: Option<f64>,
     y: Option<f64>,
@@ -435,8 +435,8 @@ pub fn blueprint_update_node(
 }
 
 /// Remove a node and all attached connections.
-#[tool(category = "blueprint")]
-pub fn blueprint_remove_node(id: String) -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_remove_node(id: String) -> Result<Value> {
     with_session_mut(|session| {
         let before_connections = session.graph.connections.len();
         let removed = session.graph.remove_node(&id);
@@ -460,8 +460,8 @@ pub fn blueprint_remove_node(id: String) -> Result<Value> {
 }
 
 /// List comments and their contained node counts.
-#[tool(category = "blueprint")]
-pub fn blueprint_list_comments() -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_list_comments() -> Result<Value> {
     with_session(|session| {
         let items = session
             .graph
@@ -484,8 +484,8 @@ pub fn blueprint_list_comments() -> Result<Value> {
 }
 
 /// List node details contained by a comment box.
-#[tool(category = "blueprint")]
-pub fn blueprint_nodes_in_comment(comment_id: String) -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_nodes_in_comment(comment_id: String) -> Result<Value> {
     with_session(|session| {
         let comment = session
             .graph
@@ -510,8 +510,8 @@ pub fn blueprint_nodes_in_comment(comment_id: String) -> Result<Value> {
 }
 
 /// Add a new comment box.
-#[tool(category = "blueprint")]
-pub fn blueprint_add_comment(
+#[tool(category = "material_graph")]
+pub fn material_graph_add_comment(
     text: String,
     x: f64,
     y: f64,
@@ -538,8 +538,8 @@ pub fn blueprint_add_comment(
 }
 
 /// Remove a comment box.
-#[tool(category = "blueprint")]
-pub fn blueprint_remove_comment(comment_id: String) -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_remove_comment(comment_id: String) -> Result<Value> {
     with_session_mut(|session| {
         let before = session.graph.comments.len();
         session.graph.comments.retain(|c| c.id != comment_id);
@@ -557,8 +557,8 @@ pub fn blueprint_remove_comment(comment_id: String) -> Result<Value> {
 }
 
 /// List connections with optional node filter.
-#[tool(category = "blueprint")]
-pub fn blueprint_list_connections(node_id: Option<String>) -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_list_connections(node_id: Option<String>) -> Result<Value> {
     with_session(|session| {
         let items = session
             .graph
@@ -579,8 +579,8 @@ pub fn blueprint_list_connections(node_id: Option<String>) -> Result<Value> {
 }
 
 /// Add a connection between two node pins.
-#[tool(category = "blueprint")]
-pub fn blueprint_add_connection(
+#[tool(category = "material_graph")]
+pub fn material_graph_add_connection(
     source_node: String,
     source_pin: String,
     target_node: String,
@@ -632,8 +632,8 @@ pub fn blueprint_add_connection(
 }
 
 /// Remove a connection by id.
-#[tool(category = "blueprint")]
-pub fn blueprint_remove_connection(connection_id: String) -> Result<Value> {
+#[tool(category = "material_graph")]
+pub fn material_graph_remove_connection(connection_id: String) -> Result<Value> {
     with_session_mut(|session| {
         let before = session.graph.connections.len();
         session
@@ -654,8 +654,8 @@ pub fn blueprint_remove_connection(connection_id: String) -> Result<Value> {
 }
 
 /// Extract a partial subgraph view by node ids.
-#[tool(category = "blueprint")]
-pub fn blueprint_get_subgraph(
+#[tool(category = "material_graph")]
+pub fn material_graph_get_subgraph(
     node_ids: Vec<String>,
     include_comments: Option<bool>,
 ) -> Result<Value> {
