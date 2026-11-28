@@ -2,7 +2,9 @@
 //! runtime contribution, grouped by the engine seam it plugs into.
 
 use engine_backend::subsystems::render::RenderFeatureRegistration;
-use helio_component::asset_component::{AssetLoaderRegistration, AssetReloadRegistration};
+use helio_component::asset_component::{
+    AssetCompose, AssetLoaderRegistration, AssetReloadRegistration,
+};
 use helio_mats::asset::MATERIAL_ASSET_KIND;
 use materials_component::assets;
 use plugin_editor_api::AssetKind;
@@ -35,6 +37,11 @@ pub(crate) fn build(p: &mut pulsar_plugins::PluginBuilder) {
         kind: MATERIAL_ASSET_KIND,
         load: assets::load_material_asset,
         size: Some(assets::payload_size),
+        // A graph's textures are assets it needs.
+        compose: Some(AssetCompose {
+            dependencies: assets::material_dependencies,
+            compose: assets::compose_material,
+        }),
     });
 
     // The project watcher publishes an update for a changed image or material.
@@ -50,14 +57,6 @@ pub(crate) fn build(p: &mut pulsar_plugins::PluginBuilder) {
         name: "materials.material_files",
         kind: AssetKind::Material,
         sources_for_file: assets::material_sources_for_file,
-    });
-
-    // A changed texture reloads every loaded graph that samples it.
-    p.add(AssetReloadRegistration {
-        origin: p.origin(),
-        name: "materials.graph_textures",
-        kind: AssetKind::Texture,
-        sources_for_file: assets::graph_sources_sampling,
     });
 }
 
@@ -126,10 +125,9 @@ mod tests {
             .into_iter()
             .filter(|summary| summary.origin == pulsar_plugins::origin!())
             .collect();
-        assert!(
-            ours.iter()
-                .any(|summary| summary.category == "asset.loader")
-        );
+        assert!(ours
+            .iter()
+            .any(|summary| summary.category == "asset.loader"));
         for summary in &ours {
             assert_eq!(
                 pulsar_plugins::plugin_of(summary.origin).map(|plugin| plugin.id.as_str()),

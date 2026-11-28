@@ -28,10 +28,10 @@ use std::time::Duration;
 use helio_mats::instance::MaterialInstanceComponent;
 use materials_component::assets::material_sources_for_file;
 use meshes_component::components::{
-    StaticMeshComponent, StaticMeshMaterialSlot, resolve_slot_material,
+    resolve_slot_material, StaticMeshComponent, StaticMeshMaterialSlot,
 };
 use meshes_component::mesh_materials::{
-    MeshMaterialInstances, MeshMaterials, material_asset_id_of,
+    material_asset_id_of, MeshMaterialInstances, MeshMaterials,
 };
 use pulsar_scenedb::{AssetState, Entity, World};
 
@@ -274,15 +274,26 @@ fn materials_load_rebind_reload_and_survive_bad_input() {
     assert_eq!(slot_color(&world, mesh, 0), GREEN);
     assert_eq!(slot_color(&world, other, 0), GREEN);
 
-    // ── A texture a graph samples reloads the graph; a graph save its folder
+    // ── A texture a graph samples is an asset the graph needs: its change
+    // reaches the graph; a graph save reloads its folder's material ──────
     let glow_version = world.asset_version(glow);
-    let sources = material_sources_for_file(&textures.join("t.png"));
+    let texture = helio_component::texture_assets::texture_source_for_file(&textures.join("t.png"));
+    assert_eq!(
+        world.asset_source_changed(&texture),
+        1,
+        "the graph holds its texture"
+    );
+    resolve(&mut world, &mut instances);
+    assert!(world.asset_version(glow) > glow_version);
+    assert!(is_graph(&world, mesh, 1));
+
+    let glow_version = world.asset_version(glow);
+    let save = materials.join("glow").join("shader_graph_save.json");
+    let sources = material_sources_for_file(&save);
     assert!(
         sources.contains(&"materials/glow".to_string()),
         "{sources:?}"
     );
-    let save = materials.join("glow").join("shader_graph_save.json");
-    assert!(material_sources_for_file(&save).contains(&"materials/glow".to_string()));
     for source in &sources {
         world.asset_source_changed(source);
     }

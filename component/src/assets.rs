@@ -4,12 +4,14 @@
 //!
 //! The plugin owns the kind ([`helio_mats::asset::MATERIAL_ASSET_KIND`]):
 //! its loader ([`load_material_asset`], registered by the plugin's root
-//! crate) runs on a SceneDB worker thread, reads the document or compiles the
-//! graph (decoding its textures there too) and produces a
-//! [`MaterialPayload`]; whoever draws with materials binds that payload and
-//! asks it for rows ([`MaterialAsset::resolve`]), without linking this
-//! crate. A graph takes slots in a scene's texture store when a draw in that
-//! scene resolves it.
+//! crate) runs on a SceneDB worker thread and reads the document or compiles
+//! the graph. A graph's textures are assets it needs
+//! ([`material_dependencies`]): SceneDB loads them, coarse first, shared with
+//! whatever else shows them, and [`compose_material`] makes the
+//! [`MaterialPayload`] from them, again as each sharpens or changes. Whoever
+//! draws with materials binds that payload and asks it for rows
+//! ([`MaterialAsset::resolve`]), without linking this crate. A graph takes
+//! slots in a scene's texture store when a draw in that scene resolves it.
 //!
 //! A material's source is its path as authored, normalized
 //! (`helio_component::asset_source`): the loader resolves it against the
@@ -18,17 +20,18 @@
 //! (a surface document, a graph save, or a texture a loaded graph samples),
 //! for the engine's asset reloads.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use helio_component::asset_component::asset_source;
+use helio_component::cooked_texture::TextureUse;
 use helio_component::texture_assets::LoadedTexture;
 use helio_mats::asset::{
-    MaterialAsset, MaterialPayload, ResolvedMaterial, SHADER_GRAPH_FILE, SurfaceMaterialDocument,
-    SurfaceValues,
+    MaterialAsset, MaterialPayload, ResolvedMaterial, SurfaceMaterialDocument, SurfaceValues,
+    SHADER_GRAPH_FILE,
 };
-use pulsar_scenedb::{AssetId, AssetPayload};
+use pulsar_scenedb::{AssetDependency, AssetId, AssetPayload};
 
 /// A loaded material.
 pub enum LoadedMaterial {
@@ -38,11 +41,23 @@ pub enum LoadedMaterial {
     Graph(GraphMaterial),
 }
 
-/// A shader-graph material: the graph and the textures it samples, decoded.
+/// A texture a graph samples, as the material was composed with it.
+#[derive(Clone)]
+struct GraphTexture {
+    /// The asset path the graph names it with.
+    asset: String,
+    id: AssetId,
+    /// The texture's content version: its GPU copy follows it, so one
+    /// texture sharpening or changing leaves the others' uploads alone.
+    version: u64,
+    image: Arc<LoadedTexture>,
+}
+
+/// A shader-graph material: the graph and the textures it samples.
+#[derive(Clone)]
 pub struct GraphMaterial {
     graph: psgc::GraphDescription,
-    /// Each sampled texture, by the asset path the graph names it with.
-    textures: Vec<(String, AssetId, Arc<LoadedTexture>)>,
+    textures: Vec<GraphTexture>,
     /// Compiled while the asset loader parses this material, which runs on a
     /// SceneDB worker. Renderer initialization must only register this source;
     /// compiling here would make the first GPU mirror attach wait on PSGC.
@@ -123,8 +138,8 @@ impl MaterialAsset for LoadedMaterial {
     fn warm(&self) {
         // A graph's textures the residency cache dropped start coming back.
         if let Self::Graph(graph) = self {
-            for (_, _, image) in &graph.textures {
-                image.warm();
+            for texture in &graph.textures {
+                texture.image.warm();
             }
         }
     }
@@ -154,15 +169,104 @@ fn resolve_material_file(source: &str) -> PathBuf {
     }
 }
 
+/// What the material loader makes: the material before the textures it needs
+/// are in.
+enum MaterialSource {
+    Surface(SurfaceValues),
+    Graph {
+        /// Without textures yet.
+        material: GraphMaterial,
+        /// Each texture it samples: the path the graph names it with, and its
+        /// asset.
+        needs: Vec<(String, AssetId)>,
+    },
+}
+
 /// The material kind's loader: runs on a SceneDB worker thread (the root
 /// crate registers it for [`helio_mats::asset::MATERIAL_ASSET_KIND`]).
 pub fn load_material_asset(source: &str) -> Result<AssetPayload, String> {
-    Ok(Arc::new(MaterialPayload(Arc::new(load_material(source)?))))
+    Ok(Arc::new(read_material(source)?))
 }
 
-/// Load the material at `source` now (the loader's work, for tools that
+/// The textures a loaded material needs (the root crate registers it with
+/// [`compose_material`]).
+pub fn material_dependencies(loaded: &AssetPayload) -> Vec<AssetId> {
+    match loaded.downcast_ref::<MaterialSource>() {
+        Some(MaterialSource::Graph { needs, .. }) => needs.iter().map(|(_, id)| *id).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The material, from what the loader made and the textures it needs, in
+/// [`material_dependencies`]' order. Runs on a SceneDB worker thread, where
+/// it prepares each texture's GPU form for the use the graph makes of it, so
+/// the draw that binds it finds it ready.
+pub fn compose_material(
+    loaded: &AssetPayload,
+    needs: &[AssetDependency],
+) -> Result<AssetPayload, String> {
+    let source = loaded
+        .downcast_ref::<MaterialSource>()
+        .ok_or("not a material")?;
+    let material = match source {
+        MaterialSource::Surface(surface) => LoadedMaterial::Surface(surface.clone()),
+        MaterialSource::Graph {
+            material,
+            needs: named,
+        } => {
+            let uses = crate::graph::texture_uses(&material.graph);
+            let mut material = material.clone();
+            for ((asset, id), need) in named.iter().zip(needs) {
+                let image = need
+                    .payload::<LoadedTexture>()
+                    .ok_or_else(|| match &need.state {
+                        pulsar_scenedb::AssetState::Failed(error) => {
+                            format!("texture '{asset}': {error}")
+                        }
+                        other => format!("texture '{asset}' is unavailable ({other:?})"),
+                    })?;
+                image
+                    .prepare(texture_use(&uses, asset))
+                    .map_err(|error| format!("texture '{asset}': {error}"))?;
+                material.textures.push(GraphTexture {
+                    asset: asset.clone(),
+                    id: *id,
+                    version: need.version,
+                    image,
+                });
+            }
+            LoadedMaterial::Graph(material)
+        }
+    };
+    Ok(Arc::new(MaterialPayload(Arc::new(material))))
+}
+
+/// What `asset` is sampled as: a colour is stored as sRGB, a roughness or
+/// normal map is not.
+fn texture_use(uses: &HashMap<String, TextureUse>, asset: &str) -> TextureUse {
+    uses.get(asset).copied().unwrap_or(TextureUse::Color)
+}
+
+/// Load the material at `source` and everything it needs now (for tools that
 /// show a material outside a world).
-pub fn load_material(source: &str) -> Result<LoadedMaterial, String> {
+pub fn load_material(source: &str) -> Result<Arc<dyn MaterialAsset>, String> {
+    pulsar_scenedb::register_composer(
+        helio_mats::asset::MATERIAL_ASSET_KIND,
+        material_dependencies,
+        compose_material,
+    );
+    let composed = pulsar_scenedb::compose_asset_now(
+        helio_mats::asset::MATERIAL_ASSET_KIND,
+        load_material_asset(source)?,
+    )?;
+    composed
+        .downcast_ref::<MaterialPayload>()
+        .map(|payload| payload.0.clone())
+        .ok_or_else(|| "the material was not composed".to_string())
+}
+
+/// Read the material at `source`, without what it needs.
+fn read_material(source: &str) -> Result<MaterialSource, String> {
     let file = resolve_material_file(source);
     let bytes = engine_fs::virtual_fs::read_file(&file)
         .map_err(|error| format!("could not read '{}': {error}", file.display()))?;
@@ -170,7 +274,7 @@ pub fn load_material(source: &str) -> Result<LoadedMaterial, String> {
         .file_name()
         .is_some_and(|name| name == SHADER_GRAPH_FILE)
     {
-        return load_graph(source, &bytes).map(LoadedMaterial::Graph);
+        return load_graph(source, &bytes);
     }
     let material: SurfaceMaterialDocument = serde_json::from_slice(&bytes)
         .map_err(|error| format!("'{}' is not a surface material: {error}", file.display()))?;
@@ -181,10 +285,10 @@ pub fn load_material(source: &str) -> Result<LoadedMaterial, String> {
             material.version
         ));
     }
-    Ok(LoadedMaterial::Surface(material.values()))
+    Ok(MaterialSource::Surface(material.values()))
 }
 
-fn load_graph(source: &str, bytes: &[u8]) -> Result<GraphMaterial, String> {
+fn load_graph(source: &str, bytes: &[u8]) -> Result<MaterialSource, String> {
     let text = std::str::from_utf8(bytes).map_err(|error| error.to_string())?;
     // Shader graph saves may carry a line comment before their JSON body.
     let json_start = text
@@ -199,36 +303,28 @@ fn load_graph(source: &str, bytes: &[u8]) -> Result<GraphMaterial, String> {
         .map_err(|error| format!("invalid main_graph: {error}"))?;
     let root = engine_state::get_project_path().map(PathBuf::from);
     let graph_textures = crate::graph::texture_assets(&graph)?;
-    // What each image is for decides its format (a colour is stored as sRGB,
-    // a roughness or normal map is not), so it is cooked for that use here, on
-    // the loader thread: the bind on the frame thread then finds it ready.
+    // The textures are assets of their own: named here with the use the graph
+    // makes of each, loaded and shared by SceneDB.
     let uses = crate::graph::texture_uses(&graph);
-    let mut textures = Vec::new();
-    let mut texture_sources = Vec::with_capacity(graph_textures.len());
-    for asset in graph_textures {
-        let path = crate::graph::texture_path(&asset, root.as_deref());
-        let texture_source = helio_component::texture_assets::texture_source_for_file(&path);
-        let usage = uses
-            .get(&asset)
-            .copied()
-            .unwrap_or(helio_component::cooked_texture::TextureUse::Color);
-        let image = helio_component::texture_assets::decode_image_file_for(&path, usage)
-            .map_err(|error| format!("texture '{asset}': {error}"))?;
-        let id = AssetId::of(
-            helio_component::texture_assets::TEXTURE_ASSET_KIND,
-            &texture_source,
-        );
-        texture_sources.push(texture_source);
-        textures.push((asset, id, Arc::new(image)));
-    }
-    remember_texture_users(source, &texture_sources);
+    let needs: Vec<(String, AssetId)> = graph_textures
+        .into_iter()
+        .map(|asset| {
+            let path = crate::graph::texture_path(&asset, root.as_deref());
+            let texture_source = helio_component::texture_assets::texture_source_for_file(&path);
+            let id = helio_component::texture_assets::needed_texture(
+                &texture_source,
+                texture_use(&uses, &asset),
+            );
+            (asset, id)
+        })
+        .collect();
     // Compile against placeholder slots while the SceneDB asset loader is on
     // a worker. Graph-local ordinals produce the same slot-independent source
     // later used by the renderer, so mirror attachment never runs PSGC.
-    let placeholders = textures
+    let placeholders = needs
         .iter()
         .enumerate()
-        .map(|(slot, (asset, _, _))| (asset.clone(), slot as u32))
+        .map(|(slot, (asset, _))| (asset.clone(), slot as u32))
         .collect();
     let snippet = crate::graph::compile_material_graph(&graph, &placeholders)?;
     let mask = crate::graph::opacity_mask(&graph);
@@ -237,60 +333,22 @@ fn load_graph(source: &str, bytes: &[u8]) -> Result<GraphMaterial, String> {
             "material '{source}': its opacity mask is not a texture's alpha at the mesh UV, so it is not cut out (depth and shadow passes cannot evaluate the graph)"
         );
     }
-    Ok(GraphMaterial {
-        mask,
-        opacity: crate::graph::constant_opacity(&graph),
-        reads_time: snippet.contains("radiant_graph_time()"),
-        graph,
-        textures,
-        compiled_snippet: snippet,
+    Ok(MaterialSource::Graph {
+        material: GraphMaterial {
+            mask,
+            opacity: crate::graph::constant_opacity(&graph),
+            reads_time: snippet.contains("radiant_graph_time()"),
+            graph,
+            textures: Vec::new(),
+            compiled_snippet: snippet,
+        },
+        needs,
     })
 }
 
-/// The material sources whose graphs sample each texture source, as their
-/// last loads found them.
-fn texture_users() -> &'static Mutex<HashMap<String, HashSet<String>>> {
-    static USERS: OnceLock<Mutex<HashMap<String, HashSet<String>>>> = OnceLock::new();
-    USERS.get_or_init(Default::default)
-}
-
-const MAX_TEXTURE_USER_SOURCES: usize = 8192;
-const MAX_MATERIALS_PER_TEXTURE_SOURCE: usize = 1024;
-
-fn remember_texture_users(material_source: &str, texture_sources: &[String]) {
-    if let Ok(mut users) = texture_users().lock() {
-        users.retain(|_, materials| {
-            materials.remove(material_source);
-            !materials.is_empty()
-        });
-        for texture_source in texture_sources {
-            let materials = users.entry(texture_source.clone()).or_default();
-            materials.insert(material_source.to_string());
-            while materials.len() > MAX_MATERIALS_PER_TEXTURE_SOURCE {
-                if let Some(victim) = materials.iter().next().cloned() {
-                    materials.remove(&victim);
-                } else {
-                    break;
-                }
-            }
-        }
-        while users.len() > MAX_TEXTURE_USER_SOURCES {
-            let victim = users
-                .keys()
-                .find(|source| !texture_sources.iter().any(|current| current == *source))
-                .cloned();
-            if let Some(victim) = victim {
-                users.remove(&victim);
-            } else {
-                break;
-            }
-        }
-    }
-}
-
-/// The materials a change to the file at `path` (absolute) reloads: the
-/// material it is (a surface document, or a graph save, which is its
-/// folder's material), and every loaded graph that samples it as a texture.
+/// The materials the file at `path` (absolute) is: a surface document, or a
+/// graph save, which is its folder's material. A texture a material samples
+/// is an asset of its own: its change reaches the material through SceneDB.
 pub fn material_sources_for_file(path: &Path) -> Vec<String> {
     let mut sources = Vec::new();
     let file = path.to_string_lossy();
@@ -303,27 +361,9 @@ pub fn material_sources_for_file(path: &Path) -> Vec<String> {
         }
     }
     sources.extend(asset_source(&file));
-    sources.extend(graph_sources_sampling(path));
     sources.sort();
     sources.dedup();
     sources
-}
-
-/// Every loaded graph material that samples the image at `path` (absolute),
-/// as its last load found it.
-pub fn graph_sources_sampling(path: &Path) -> Vec<String> {
-    let texture_source = helio_component::texture_assets::texture_source_for_file(path);
-    texture_users()
-        .lock()
-        .map(|users| {
-            users
-                .get(&texture_source)
-                .into_iter()
-                .flatten()
-                .cloned()
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// Compiled graph sources (hash and WGSL), by material and content version.
@@ -360,32 +400,27 @@ fn compiled_graph(
         .map(|(ordinal, asset)| (asset.clone(), ordinal as u32))
         .collect();
     let mut slots = [helio_mats::GpuMaterial::NO_TEXTURE; 5];
-    // What each image is for decides its format: a colour is stored as sRGB and
-    // a roughness or normal map is not.
     let uses = crate::graph::texture_uses(&graph.graph);
-    let use_of = |asset: &str| {
-        uses.get(asset)
-            .copied()
-            .unwrap_or(helio_component::cooked_texture::TextureUse::Color)
-    };
     // A material with several images the store does not hold yet cooks them
     // side by side on the loader threads, not one after another here.
     helio_component::texture_assets::prefetch_missing(
-        graph
-            .textures
-            .iter()
-            .map(|(asset, texture, image)| (*texture, use_of(asset), &**image)),
-        version,
+        graph.textures.iter().map(|texture| {
+            (
+                texture.id,
+                texture.version,
+                texture_use(&uses, &texture.asset),
+                &*texture.image,
+            )
+        }),
         mirror,
     );
-    for (asset, texture, image) in &graph.textures {
-        // A texture's GPU copy follows the material's version: the material
-        // reloads when one of its textures changes.
+    for texture in &graph.textures {
+        let asset = &texture.asset;
         let slot = helio_component::texture_assets::resident_slot_staged(
-            *texture,
-            version,
-            image,
-            use_of(asset),
+            texture.id,
+            texture.version,
+            &texture.image,
+            texture_use(&uses, asset),
             mirror,
         )
         .map_err(|error| format!("texture '{asset}': {error}"))?;
@@ -523,7 +558,6 @@ mod full_texture_table_tests {
         .unwrap();
         let folder = write_graph(&dir, &texture);
         let material = load_material(&folder.to_string_lossy()).expect("the graph loads");
-        assert!(matches!(material, LoadedMaterial::Graph(_)));
 
         let scene = full_scene(&ctx);
         let id = AssetId::of(

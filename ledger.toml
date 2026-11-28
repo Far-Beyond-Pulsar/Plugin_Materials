@@ -54,7 +54,7 @@ status = "verified"
 [[buffer]]
 key = "materials"
 producers = ["MaterialComponent"]
-consumers = ["helio-pass-forward-lit", "helio-pass-gbuffer", "helio-pass-gi", "helio-pass-object-batch", "helio-pass-shadow", "helio-pass-transparent", "helio-pass-vg", "helio-pass-vg-dense", "helio-pass-vg-raster", "helio-pass-vg-shade", "helio-pass-voxel-planet"]
+consumers = ["helio-pass-forward-lit", "helio-pass-gbuffer", "helio-pass-mesh-rays", "helio-pass-object-batch", "helio-pass-shadow", "helio-pass-transparent", "helio-pass-vg", "helio-pass-vg-dense", "helio-pass-vg-raster", "helio-pass-vg-shade", "helio-pass-voxel-planet", "meshes_component"]
 owner = "helio-scene-derivations scene join (execution output, one row per drawn section)"
 disposition = "keep: material rows come from StaticMeshDraw's resolved slot materials; the default is the slot's imported surface, defined once in helio-component (Phase 2)"
 target_contract = "Phase 2; 03-gpu-reflection-and-rendering.md"
@@ -76,9 +76,9 @@ status = "verified"
 [[pass]]
 crate = "helio-pass-materials"
 in_default_graph = false
-reads = []
+reads = ["material_texture_data"]
 owner = "helio-pass-materials"
-disposition = "keep: the kind's own, moved with it into its plugin (plugin-migration.md Phases B and C)"
+disposition = "keep: publishes the scene's material texture table: it binds the texture data rows (material_texture_data) beside the material rows"
 target_contract = "Phase C; plugin-migration.md"
 test = "none: no test names this row; the owning plugin's suites cover its behaviour"
 status = "unverified"
@@ -94,3 +94,29 @@ disposition = "keep: binds a loaded material asset into the instances naming it;
 target_contract = "p17; plugin-migration.md (material instances)"
 test = "plugins/vendor/materials/tests/material_assets.rs"
 status = "verified"
+
+# ── Material texture data ───────────────────────────────────────
+
+[[schema]]
+type = "MaterialTexturesComponent"
+path = "helio_mats::host_rows::MaterialTexturesComponent"
+buffers = ["material_texture_data"]
+clears_on_remove = true
+releases_var_len = false
+registered = true
+writer = "the material instance's GPU dispatch, at the instance entity's row beside its MaterialComponent row"
+owner = "helio_mats::host_rows"
+disposition = "keep: a material's texture slots, UV transforms, normal scale, occlusion strength and alpha cutoff, read only while the material row carries FLAG_TEXTURE_DATA"
+target_contract = "p17; plugin-migration.md (material instances)"
+test = "none: no test reads this row; the material instance suite is plugins/vendor/materials/tests/material_assets.rs"
+status = "unverified"
+
+[[buffer]]
+key = "material_texture_data"
+producers = ["MaterialTexturesComponent"]
+consumers = ["helio-pass-materials"]
+owner = "helio_mats (contract MATERIAL_TEXTURE_DATA)"
+disposition = "keep: one texture data row per material row, at the same index; the materials feature binds it for every material shader"
+target_contract = "p17; plugin-migration.md (material instances)"
+test = "none: no test reads this row"
+status = "unverified"
